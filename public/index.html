@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tienda Riftbound</title>
+<meta name="description" content="Cartas sueltas de Riftbound: stock, precios y pedidos por WhatsApp.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <button class="btn filters-toggle" id="openFilters" aria-label="Filtros">☰ Filtros</button>
+    <a class="brand" href="/" id="brand">Tienda <span>Riftbound</span></a>
+    <label class="search">
+      <span aria-hidden="true">🔎</span>
+      <span class="sr">Buscar cartas</span>
+      <input id="q" type="search" placeholder="Buscar carta por nombre o texto…" autocomplete="off">
+    </label>
+    <button class="btn" id="openCart">🛒 <span class="sr">Carrito</span><span class="badge" id="cartCount">0</span></button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side" id="side" aria-label="Filtros">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:6px">
+      <strong>Filtros</strong>
+      <button class="btn ghost" id="clear" style="padding:5px 10px;font-size:13px">Limpiar</button>
+    </div>
+    <div class="fgroup"><h3>Expansión</h3><div id="fSets"></div></div>
+    <div class="fgroup"><h3>Dominio</h3><div class="chips" id="fDoms"></div></div>
+    <div class="fgroup"><h3>Tipo</h3><div id="fTypes"></div></div>
+    <div class="fgroup"><h3>Rareza</h3><div id="fRars"></div></div>
+    <div class="fgroup"><h3>Versión</h3><div id="fVars"></div></div>
+    <div class="fgroup"><h3>Costo de energía</h3>
+      <div class="range"><input id="eMin" type="number" min="0" placeholder="Mín"><span>–</span><input id="eMax" type="number" min="0" placeholder="Máx"></div>
+    </div>
+    <div class="fgroup"><h3>Precio</h3>
+      <div class="range"><input id="pMin" type="number" min="0" placeholder="Mín"><span>–</span><input id="pMax" type="number" min="0" placeholder="Máx"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <span class="count" id="count">Cargando…</span>
+      <label class="switch"><input type="checkbox" id="inStock"> Solo con stock</label>
+      <select class="field" id="sort" aria-label="Ordenar">
+        <option value="rel">Destacados</option>
+        <option value="name">Nombre (A-Z)</option>
+        <option value="pa">Precio: menor a mayor</option>
+        <option value="pd">Precio: mayor a menor</option>
+        <option value="num">Número de colección</option>
+      </select>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="loading" id="loading">Cargando cartas…</div>
+    <div class="more" id="more"></div>
+  </main>
+</div>
+
+<p class="foot" id="foot"></p>
+
+<div class="overlay" id="overlay"></div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mName">
+  <button class="close" data-close aria-label="Cerrar">×</button>
+  <div class="modal-in" id="modalBody"></div>
+</div>
+
+<aside class="drawer" id="cart" aria-label="Carrito">
+  <header><h2>Tu pedido</h2><button class="btn ghost" data-close aria-label="Cerrar">✕</button></header>
+  <div class="body" id="cartBody"></div>
+  <footer>
+    <div class="total"><span>Total</span><span id="cartTotal">$ 0</span></div>
+    <input class="field" id="custName" placeholder="Tu nombre" autocomplete="name">
+    <button class="btn primary" id="sendWa" style="justify-content:center;padding:12px">Enviar pedido por WhatsApp</button>
+    <p class="note" id="cartNote"></p>
+  </footer>
+</aside>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="shared.js"></script>
+<script src="store.js"></script>
+</body>
+</html>

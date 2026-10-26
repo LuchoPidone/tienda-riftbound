@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Administrador · Tienda Riftbound</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 16px 110px; }
+  .login { max-width: 360px; margin: 12vh auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  .login h1 { margin: 0; font-size: 20px; }
+  .err { color: var(--bad); font-size: 14px; min-height: 1em; }
+  .tabs { display: flex; gap: 8px; margin: 4px 0 16px; }
+  .tabs .btn[aria-selected="true"] { border-color: var(--accent); background: rgba(217,168,78,.15); }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .filters .field { width: auto; }
+  .filters input[type=search] { flex: 1; min-width: 200px; }
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+  .r { display: grid; grid-template-columns: 46px 1fr auto auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .r.dirty { border-color: var(--accent); }
+  .r img { width: 46px; border-radius: 5px; }
+  .r .n { font-weight: 600; }
+  .r .m { color: var(--muted); font-size: 12px; }
+  .r .ctl { display: contents; }
+  .r label { font-size: 11px; color: var(--muted); display: block; }
+  .pinput { width: 110px; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; outline: 0; }
+  .pinput:focus { border-color: var(--accent); }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: rgba(11,15,23,.95); border-top: 1px solid var(--line); }
+  .bar-in { max-width: 1100px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; }
+  .bar-in .st { color: var(--muted); margin-right: auto; font-size: 14px; }
+  .form { display: grid; gap: 14px; max-width: 560px; }
+  .form label { display: grid; gap: 6px; font-size: 14px; }
+  .form small { color: var(--muted); }
+  .rp { display: grid; grid-template-columns: 1fr 140px; gap: 8px 12px; align-items: center; }
+  .card-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+  .card-box h2 { margin: 0 0 12px; font-size: 17px; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+  .stats b { color: var(--text); }
+  @media (max-width: 640px) {
+    .r { grid-template-columns: 40px 1fr; }
+    .r .ctl { grid-column: 1 / -1; display: flex; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/">Tienda <span>Riftbound</span></a>
+    <span style="color:var(--muted);margin-right:auto">Administrador</span>
+    <a class="btn" href="/" target="_blank">Ver tienda ↗</a>
+    <button class="btn ghost" id="logout" hidden>Salir</button>
+  </div>
+</header>
+
+<form class="login" id="login">
+  <h1>Entrar como administrador</h1>
+  <input class="field" type="password" id="pw" placeholder="Contraseña" autocomplete="current-password" required>
+  <button class="btn primary" style="justify-content:center">Entrar</button>
+  <div class="err" id="loginErr"></div>
+</form>
+
+<div class="wrap" id="app" hidden>
+  <div class="tabs" role="tablist">
+    <button class="btn" role="tab" aria-selected="true" data-tab="tInv">Stock y precios</button>
+    <button class="btn" role="tab" aria-selected="false" data-tab="tCfg">Configuración</button>
+  </div>
+
+  <section id="tInv">
+    <div class="stats" id="stats"></div>
+    <div class="filters">
+      <input class="field" type="search" id="aq" placeholder="Buscar carta…">
+      <select class="field" id="aSet"><option value="">Todas las expansiones</option></select>
+      <select class="field" id="aRar"><option value="">Todas las rarezas</option></select>
+      <label class="switch"><input type="checkbox" id="aStock"> Solo con stock</label>
+    </div>
+    <div class="rows" id="rows"></div>
+    <div class="more" id="aMore"></div>
+  </section>
+
+  <section id="tCfg" hidden>
+    <div class="card-box">
+      <h2>Datos de la tienda</h2>
+      <div class="form">
+        <label>Nombre de la tienda<input class="field" id="cName" maxlength="80"></label>
+        <label>WhatsApp para recibir pedidos
+          <input class="field" id="cWa" inputmode="numeric" placeholder="Ej: 5491122334455">
+          <small>Código de país + área + número, sin espacios, sin 0 ni 15. Argentina: 549 + área + número.</small>
+        </label>
+        <label>Símbolo de moneda<input class="field" id="cCur" maxlength="6" placeholder="$"></label>
+        <label>Mensaje al pie de la tienda (opcional)<input class="field" id="cNote" maxlength="300" placeholder="Ej: Envíos a todo el país · Retiro en Mar del Plata"></label>
+      </div>
+    </div>
+    <div class="card-box">
+      <h2>Precio por rareza</h2>
+      <p class="note" style="margin-top:0">Se usa para las cartas a las que no les pusiste un precio propio. Dejalo vacío para que figure "Consultar".</p>
+      <div class="rp" id="rp"></div>
+    </div>
+    <div class="card-box">
+      <h2>Lista de cartas</h2>
+      <p class="note" style="margin-top:0" id="cardsInfo"></p>
+      <button class="btn" id="refreshCards">Actualizar lista de cartas ahora</button>
+      <p class="note">Se actualiza sola una vez por día. Usá este botón cuando salga una expansión nueva.</p>
+    </div>
+  </section>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <div class="bar-in">
+    <span class="st" id="saveState">Sin cambios</span>
+    <button class="btn primary" id="save" disabled>Guardar cambios</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="shared.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>
