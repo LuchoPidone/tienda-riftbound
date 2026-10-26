@@ -57,4 +57,3 @@ Cuando vendas, descontá las cantidades desde el administrador.
 - **La tienda dice que no pudo cargar las cartas:** esperá unos minutos y recargá. La primera carga baja más de 1400 cartas y puede tardar.
 - **El admin dice "Falta configurar ADMIN_PASSWORD":** revisá el Paso 3 y volvé a publicar.
 - **Salió una expansión nueva:** entrá al admin → Configuración → **Actualizar lista de cartas ahora**.
-  -

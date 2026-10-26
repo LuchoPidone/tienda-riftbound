@@ -53,7 +53,11 @@
     $("logout").hidden = false;
     $("rows").innerHTML = `<div class="loading">Cargando cartas…</div>`;
     try {
-      const [c, i] = await Promise.all([RB.loadCards(), RB.loadInventory()]);
+      const progress = (a, b) => {
+        $("rows").innerHTML = `<div class="loading">Descargando la lista de cartas… ${Math.round((a / b) * 100)}%</div>`;
+      };
+      const [c, i] = await Promise.all([RB.loadCards({ password: pw, onProgress: progress }), RB.loadInventory()]);
+      if (c.saveError) toast("Las cartas se ven, pero no se pudieron guardar en el servidor: " + c.saveError);
       cards = c.cards || [];
       cardsMeta = c;
       inv = i;
@@ -206,7 +210,12 @@
     b.disabled = true;
     b.textContent = "Actualizando… (puede tardar unos segundos)";
     try {
-      const c = await RB.loadCards(true, pw);
+      const c = await RB.loadCards({
+        refresh: true,
+        password: pw,
+        onProgress: (a, n) => (b.textContent = `Actualizando… ${Math.round((a / n) * 100)}%`),
+      });
+      if (c.saveError) throw new Error(c.saveError);
       cards = c.cards || [];
       cardsMeta = c;
       fillConfig();

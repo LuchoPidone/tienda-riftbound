@@ -47,10 +47,105 @@ window.RB = (() => {
     return data;
   }
 
-  const loadCards = (refresh, password) =>
-    getJSON("/api/cards" + (refresh ? "?refresh=1" : ""), {
-      headers: password ? { "x-admin-password": password } : {},
-    });
+  // ---------- Lista de cartas ----------
+  const API = "https://api.riftcodex.com/cards";
+  const DAY = 24 * 60 * 60 * 1000;
+
+  function normalize(c) {
+    const set = c.set || {};
+    const cl = c.classification || {};
+    const at = c.attributes || {};
+    const md = c.metadata || {};
+    const media = c.media || {};
+    const text = c.text || {};
+    const domains = Array.isArray(cl.domain) ? cl.domain : cl.domain ? [cl.domain] : [];
+    return {
+      id: String(c.id || c.riftbound_id || c.public_code || c.name),
+      code: c.public_code || c.riftbound_id || "",
+      n: c.name || "",
+      s: String(set.set_id || set.id || "").toUpperCase(),
+      sl: set.label || set.name || "",
+      num: c.collector_number ?? null,
+      r: cl.rarity || "",
+      d: domains,
+      t: cl.type || "",
+      st: cl.supertype || "",
+      e: at.energy ?? null,
+      m: at.might ?? null,
+      p: at.power ?? null,
+      img: media.image_url || "",
+      art: media.artist || "",
+      txt: text.plain || "",
+      alt: !!md.alternate_art,
+      sig: !!md.signature,
+      ov: !!md.overnumbered,
+      o: c.orientation || "",
+    };
+  }
+
+  // Descarga todas las cartas desde el navegador del visitante.
+  async function fetchFromBrowser(onProgress) {
+    const page = async (n) => {
+      const res = await fetch(`${API}?size=100&page=${n}&sort=collector_number&dir=1`);
+      if (!res.ok) throw new Error("riftcodex respondió " + res.status);
+      return res.json();
+    };
+    const first = await page(1);
+    const pages = first.pages || Math.ceil((first.total || 0) / 100) || 1;
+    let items = [...(first.items || [])];
+    onProgress && onProgress(1, pages);
+    for (let p = 2; p <= pages; p += 4) {
+      const nums = [];
+      for (let k = p; k < p + 4 && k <= pages; k++) nums.push(k);
+      const res = await Promise.all(nums.map(page));
+      res.forEach((r) => (items = items.concat(r.items || [])));
+      onProgress && onProgress(nums[nums.length - 1], pages);
+    }
+    const seen = new Set();
+    const cards = [];
+    for (const raw of items) {
+      const c = normalize(raw);
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      cards.push(c);
+    }
+    if (!cards.length) throw new Error("la lista vino vacía");
+    return { updatedAt: new Date().toISOString(), count: cards.length, cards };
+  }
+
+  // opts: { password, refresh, onProgress }
+  // Con password (administrador) actualiza la copia guardada en el servidor si falta o es vieja.
+  async function loadCards(opts = {}) {
+    let server = null;
+    if (!opts.refresh) {
+      try {
+        server = await getJSON("/api/cards");
+      } catch {}
+    }
+    const has = server && server.cards && server.cards.length;
+    const old = has && Date.now() - Date.parse(server.updatedAt) > DAY;
+    if (has && !(opts.password && old)) return server;
+    if (!opts.password && has) return server;
+    try {
+      const data = await fetchFromBrowser(opts.onProgress);
+      if (opts.password) {
+        try {
+          await getJSON("/api/cards", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-admin-password": opts.password },
+            body: JSON.stringify(data),
+          });
+          data.saved = true;
+        } catch (e) {
+          data.saveError = e.message;
+        }
+      }
+      return data;
+    } catch (e) {
+      if (has) return server;
+      throw new Error("No se pudo descargar la lista de cartas (" + e.message + ")");
+    }
+  }
   const loadInventory = () => getJSON("/api/inventory", { cache: "no-store" });
 
   function rarityRank(r) {
