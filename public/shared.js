@@ -115,7 +115,29 @@ window.RB = (() => {
 
   // opts: { password, refresh, onProgress }
   // Con password (administrador) actualiza la copia guardada en el servidor si falta o es vieja.
+  // Cartas extra (sets que riftcodex todavía no tiene, ej. Radiance).
+  async function loadExtras() {
+    try {
+      const x = await getJSON("/extra-cards.json");
+      return x && Array.isArray(x.cards) ? x : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function withExtras(data, extras) {
+    if (!extras || !data) return data;
+    const sets = new Set(extras.sets || extras.cards.map((c) => c.s));
+    const cards = data.cards.filter((c) => !sets.has(c.s)).concat(extras.cards);
+    return { ...data, cards, count: cards.length };
+  }
+
   async function loadCards(opts = {}) {
+    const [main, extras] = await Promise.all([loadMainCards(opts), loadExtras()]);
+    return withExtras(main, extras);
+  }
+
+  async function loadMainCards(opts = {}) {
     let server = null;
     if (!opts.refresh) {
       try {
