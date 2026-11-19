@@ -8,6 +8,10 @@
   let dirty = false;
   let list = [];
   let shown = 0;
+  let saleLoc = {};
+  let saleDirty = false;
+  const SALE = { carpeta: "📁", bulk: "📦", cajonera: "🗄️" };
+  const SALE_L = { carpeta: "Carpeta de ventas", bulk: "Caja de bulk", cajonera: "Cajonera" };
 
   function getPw() {
     try { return sessionStorage.getItem("rb-admin") || ""; } catch { return ""; }
@@ -56,7 +60,12 @@
       const progress = (a, b) => {
         $("rows").innerHTML = `<div class="loading">Descargando la lista de cartas… ${Math.round((a / b) * 100)}%</div>`;
       };
-      const [c, i] = await Promise.all([RB.loadCards({ password: pw, onProgress: progress }), RB.loadInventory()]);
+      const [c, i, col] = await Promise.all([
+        RB.loadCards({ password: pw, onProgress: progress }),
+        RB.loadInventory(),
+        RB.getJSON("/api/coleccion", { cache: "no-store", headers: { "x-admin-password": pw } }).catch(() => ({ saleLoc: {} })),
+      ]);
+      saleLoc = col.saleLoc || {};
       if (c.saveError) toast("Las cartas se ven, pero no se pudieron guardar en el servidor: " + c.saveError);
       cards = c.cards || [];
       cardsMeta = c;
@@ -102,10 +111,12 @@
     const s = $("aSet").value;
     const r = $("aRar").value;
     const only = $("aStock").checked;
+    const lc = $("aLoc").value;
     list = cards
       .filter((c) =>
         (!q || q.split(/\s+/).every((w) => (c.n + " " + c.code).toLowerCase().includes(w))) &&
-        (!s || c.s === s) && (!r || c.r === r) && (!only || RB.stock(c, inv) > 0)
+        (!s || c.s === s) && (!r || c.r === r) && (!only || RB.stock(c, inv) > 0) &&
+        (!lc || (lc === "none" ? !saleLoc[c.id] : saleLoc[c.id] === lc))
       )
       .sort((a, b) => a.s.localeCompare(b.s) || (a.num ?? 0) - (b.num ?? 0) || a.n.localeCompare(b.n));
     shown = 0;
@@ -121,7 +132,7 @@
     return `<div class="r" data-id="${RB.esc(c.id)}">
       <img loading="lazy" src="${RB.esc(c.img)}" alt="">
       <div>
-        <div class="n">${RB.esc(c.n)}</div>
+        <div class="n">${saleLoc[c.id] ? `<span class="ic" title="${SALE_L[saleLoc[c.id]]}">${SALE[saleLoc[c.id]]}</span>` : ""}${RB.esc(c.n)}</div>
         <div class="m">${RB.esc(c.sl || c.s)}${c.num !== null ? " #" + c.num : ""} · ${RB.esc(RB.RARITY_ES[c.r] || c.r)}${v.length ? " · " + RB.esc(v.join(", ")) : ""}</div>
       </div>
       <div class="ctl">
@@ -130,6 +141,12 @@
         </div>
         <div><label>Precio</label>
           <input class="pinput p" type="number" min="0" step="any" value="${it.p ?? ""}" placeholder="${rp !== undefined ? rp : "Consultar"}" title="Vacío = precio por rareza" aria-label="Precio">
+        </div>
+        <div><label>Dónde está</label>
+          <select class="lsel loc" aria-label="Dónde la guardás">
+            <option value="">—</option>
+            ${Object.keys(SALE).map((k) => `<option value="${k}" ${saleLoc[c.id] === k ? "selected" : ""}>${SALE[k]} ${SALE_L[k]}</option>`).join("")}
+          </select>
         </div>
       </div>
     </div>`;
@@ -166,13 +183,22 @@
     const r = e.target.closest(".r");
     if (!r) return;
     if (e.target.classList.contains("q")) setItem(r.dataset.id, { q: Math.max(0, Math.floor(Number(e.target.value) || 0)) });
+    if (e.target.classList.contains("loc")) {
+      if (e.target.value) saleLoc[r.dataset.id] = e.target.value;
+      else delete saleLoc[r.dataset.id];
+      saleDirty = true;
+      markDirty();
+      const n = r.querySelector(".n");
+      const cn = (cards.find((x) => x.id === r.dataset.id) || {}).n || "";
+      n.innerHTML = (saleLoc[r.dataset.id] ? `<span class="ic">${SALE[saleLoc[r.dataset.id]]}</span>` : "") + RB.esc(cn);
+    }
     if (e.target.classList.contains("p")) setItem(r.dataset.id, { p: e.target.value === "" ? null : Number(e.target.value) });
     r.classList.add("dirty");
   });
 
   let qt;
   $("aq").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(run, 180); });
-  ["aSet", "aRar", "aStock"].forEach((k) => $(k).addEventListener("change", run));
+  ["aSet", "aRar", "aStock", "aLoc"].forEach((k) => $(k).addEventListener("change", run));
 
   // ---------- Configuración ----------
   function fillConfig() {
@@ -253,6 +279,14 @@
         headers: { "content-type": "application/json", "x-admin-password": pw },
         body: JSON.stringify({ settings: inv.settings, items: inv.items }),
       });
+      if (saleDirty) {
+        await RB.getJSON("/api/coleccion", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-admin-password": pw },
+          body: JSON.stringify({ saleLoc }),
+        });
+        saleDirty = false;
+      }
       dirty = false;
       document.querySelectorAll(".r.dirty").forEach((r) => r.classList.remove("dirty"));
       $("saveState").textContent = "Guardado ✓ · ya se ve en la tienda";

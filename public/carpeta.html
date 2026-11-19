@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Mi carpeta · Riftbound</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="carpeta.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <button class="btn filters-toggle" id="openFilters" aria-label="Filtros" hidden>☰ Filtros</button>
+    <a class="brand" href="/carpeta">Mi <span>carpeta</span></a>
+    <label class="search" id="searchBox" hidden>
+      <span aria-hidden="true">🔎</span>
+      <span class="sr">Buscar cartas</span>
+      <input id="q" type="search" placeholder="¿Dónde está…? Buscá una carta" autocomplete="off">
+    </label>
+    <a class="btn ghost hide-sm" href="/admin">Admin</a>
+    <a class="btn ghost hide-sm" href="/" target="_blank">Tienda ↗</a>
+    <button class="btn ghost" id="logout" hidden>Salir</button>
+  </div>
+</header>
+
+<form class="login" id="login">
+  <h1>Mi carpeta</h1>
+  <p class="note" style="margin:0">Entrá con la misma contraseña del administrador.</p>
+  <input class="field" type="password" id="pw" placeholder="Contraseña" autocomplete="current-password" required>
+  <button class="btn primary" style="justify-content:center">Entrar</button>
+  <div class="err" id="loginErr"></div>
+</form>
+
+<div id="app" hidden>
+  <div class="cwrap">
+    <div class="alert" id="alert" hidden></div>
+    <div class="actions">
+      <button class="btn primary" data-act="add">＋ Cargar cartas</button>
+      <button class="btn" data-act="buy">🛍️ Registrar compra</button>
+      <button class="btn" data-act="sell">💰 Registrar venta</button>
+      <span class="savest" id="saveState"></span>
+    </div>
+    <nav class="ctabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="todo">📍 Dónde está</button>
+      <button role="tab" data-tab="mine">Mis cartas</button>
+      <button role="tab" data-tab="col">Mi colección</button>
+      <button role="tab" data-tab="decks">Mazos</button>
+      <button role="tab" data-tab="loans">Préstamos <span class="tbadge" id="loanBadge" hidden></span></button>
+      <button role="tab" data-tab="tx">Compras y ventas</button>
+    </nav>
+  </div>
+
+  <div class="layout">
+    <aside class="side" id="side" aria-label="Filtros">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:6px">
+        <strong>Filtros</strong>
+        <button class="btn ghost" id="clear" style="padding:5px 10px;font-size:13px">Limpiar</button>
+      </div>
+      <div class="fgroup" id="gLoc"><h3>Dónde está</h3><div id="fLocs"></div></div>
+      <div class="fgroup"><h3>Expansión</h3><div id="fSets"></div></div>
+      <div class="fgroup"><h3>Dominio</h3><div class="chips" id="fDoms"></div></div>
+      <div class="fgroup"><h3>Tipo</h3><div id="fTypes"></div></div>
+      <div class="fgroup"><h3>Rareza</h3><div id="fRars"></div></div>
+      <div class="fgroup"><h3>Versión</h3><div id="fVars"></div></div>
+      <div class="fgroup"><h3>Costo de energía</h3>
+        <div class="range"><input id="eMin" type="number" min="0" placeholder="Mín"><span>–</span><input id="eMax" type="number" min="0" placeholder="Máx"></div>
+      </div>
+      <div class="fgroup"><h3>Precio</h3>
+        <div class="range"><input id="pMin" type="number" min="0" placeholder="Mín"><span>–</span><input id="pMax" type="number" min="0" placeholder="Máx"></div>
+      </div>
+    </aside>
+    <main id="main"><div class="loading">Cargando…</div></main>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"></div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true">
+  <button class="close" data-close aria-label="Cerrar">×</button>
+  <div class="modal-in" id="modalBody"></div>
+</div>
+
+<div class="modal wide" id="loader" role="dialog" aria-modal="true" aria-labelledby="lTitle">
+  <button class="close" data-close aria-label="Cerrar">×</button>
+  <div class="lin" id="loaderBody"></div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="shared.js"></script>
+<script src="carpeta.js"></script>
+</body>
+</html>
