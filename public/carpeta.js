@@ -1484,6 +1484,57 @@
     renderMain();
   }
 
+  // ---------- Copia de seguridad ----------
+  $("backup").addEventListener("click", () => {
+    $("modalBody").innerHTML = `<div style="grid-column:1/-1">
+      <h2>💾 Copia de seguridad</h2>
+      <p class="note">Descargá un archivo con todo: tus cartas, colección, mazos, préstamos, compras y ventas, el stock y los precios de la tienda, y dónde guardás cada carta en venta. Guardalo en tu PC (por ejemplo en «proyectos de claude»). Si algún día se borra la página, con ese archivo se recupera todo.</p>
+      <div class="mini"><button class="btn primary" id="bkDown">⬇️ Descargar copia</button></div>
+      <h3 class="sub">Restaurar</h3>
+      <p class="note">Reemplaza todo lo que hay ahora por lo que tiene el archivo.</p>
+      <input type="file" id="bkFile" accept=".json,application/json">
+      <div class="note" id="bkMsg"></div>
+    </div>`;
+    open("modal");
+    $("bkDown").onclick = async () => {
+      try {
+        const [col, invNow] = await Promise.all([api("GET"), RB.loadInventory()]);
+        const out = { app: "mi-carpeta-riftbound", version: 1, fecha: new Date().toISOString(), data: col.data, saleLoc: col.saleLoc, inventory: invNow };
+        const blob = new Blob([JSON.stringify(out, null, 1)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `copia-mi-carpeta-${today()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        $("bkMsg").textContent = "Copia descargada ✓";
+      } catch (e) {
+        $("bkMsg").textContent = "No se pudo descargar: " + e.message;
+      }
+    };
+    $("bkFile").onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const b = JSON.parse(await file.text());
+        if (!b || b.app !== "mi-carpeta-riftbound" || !b.data || !Array.isArray(b.data.copies)) throw new Error("ese archivo no es una copia de Mi carpeta");
+        if (!window.confirm(`¿Restaurar la copia del ${String(b.fecha || "").slice(0, 10)}? Se reemplaza todo lo que hay ahora.`)) return;
+        await api("POST", { data: b.data, saleLoc: b.saleLoc || {} });
+        if (b.inventory && b.inventory.items) {
+          await RB.getJSON("/api/inventory", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-admin-password": pw },
+            body: JSON.stringify({ settings: b.inventory.settings, items: b.inventory.items }),
+          });
+        }
+        $("bkMsg").textContent = "Copia restaurada ✓ Recargando…";
+        setTimeout(() => location.reload(), 900);
+      } catch (err) {
+        $("bkMsg").textContent = "No se pudo restaurar: " + err.message;
+      }
+    };
+  });
+
   // ---------- Ventanas ----------
   function open(id) {
     if (id === "loader") $("modal").classList.remove("open");
