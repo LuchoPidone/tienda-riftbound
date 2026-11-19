@@ -325,6 +325,7 @@
 
   function renderMain() {
     if (tab === "decks" && !view.deck) return renderDecks();
+    if (tab === "decks" && view.deck) return renderDeck();
     if (tab === "loans") return renderLoans();
     if (tab === "tx") return renderTx();
     return renderCards();
@@ -414,13 +415,13 @@
       m.set(key, x);
     };
     for (const cp of g.copies) {
-      const col = cp.k === "col" ? " · Col." : "";
+      const col = (cp.k === "col" ? " · Col." : "") + (cp.f ? " ✨" : "");
       if (cp.k === "bor") {
         const where = cp.loc === "deck" ? ` · 🃏 ${dname(cp.deck)}` : "";
-        add("b" + cp.from + cp.loc + cp.deck, "bor", `🫴 De ${pname(cp.from)}${where}`);
-      } else if (cp.loc === "home") add("h" + cp.k, "home", "🏠 En casa" + col);
-      else if (cp.loc === "deck") add("d" + cp.deck + cp.k, "deck", `🃏 ${dname(cp.deck)}${col}`);
-      else if (cp.loc === "loan") add("l" + cp.to + isLate(cp), isLate(cp) ? "late" : "loan", `${isLate(cp) ? "⚠️" : "🤝"} ${pname(cp.to)}`);
+        add("b" + cp.from + cp.loc + cp.deck + !!cp.f, "bor", `🫴 De ${pname(cp.from)}${where}${cp.f ? " ✨" : ""}`);
+      } else if (cp.loc === "home") add("h" + cp.k + !!cp.f, "home", "🏠 En casa" + col);
+      else if (cp.loc === "deck") add("d" + cp.deck + cp.k + !!cp.f, "deck", `🃏 ${dname(cp.deck)}${col}`);
+      else if (cp.loc === "loan") add("l" + cp.to + isLate(cp) + !!cp.f, isLate(cp) ? "late" : "loan", `${isLate(cp) ? "⚠️" : "🤝"} ${pname(cp.to)}${cp.f ? " ✨" : ""}`);
     }
     let html = [...m.values()].map((x) => `<span class="loc ${x.cls}">${esc(x.label)}${x.n > 1 ? " ×" + x.n : ""}</span>`).join("");
     if (showStock && g.stock > 0) {
@@ -472,6 +473,148 @@
       </div>
       <p class="note">Cuando cargás un mazo, las cartas que tenés en casa pasan a ese mazo. Si desarmás el mazo, vuelven a casa.</p>`;
   }
+
+  // ---------- Editor de un mazo ----------
+  const TYPE_ORDER = ["Legend", "Battlefield", "Rune", "Unit", "Spell", "Gear"];
+  function deckRows(d) {
+    const m = new Map();
+    for (const cp of D.copies) {
+      if (cp.loc !== "deck" || cp.deck !== d.id) continue;
+      const key = cp.c + "|" + (cp.f ? 1 : 0);
+      let r = m.get(key);
+      if (!r) m.set(key, (r = { c: byId.get(cp.c), id: cp.c, f: !!cp.f, copies: [] }));
+      r.copies.push(cp);
+    }
+    return [...m.values()].filter((r) => r.c);
+  }
+  function renderDeck() {
+    setLayout(false);
+    const d = deck(view.deck);
+    if (!d) { view.deck = null; return renderDecks(); }
+    const all = deckRows(d);
+    const rows = all.filter((r) => !f.q || cardMatches(r.c));
+    const total = all.reduce((s, r) => s + r.copies.length, 0);
+    const byType = new Map();
+    for (const r of rows) {
+      const t = TYPE_ORDER.includes(r.c.t) ? r.c.t : "Otro";
+      if (!byType.has(t)) byType.set(t, []);
+      byType.get(t).push(r);
+    }
+    const order = [...TYPE_ORDER, "Otro"].filter((t) => byType.has(t));
+    $("main").innerHTML = `
+      <div class="sechead">
+        <button class="btn back" data-back>← Mazos</button>
+        <h2>🃏 ${esc(d.name)} <span class="note">· ${nc(total)}</span></h2>
+        <button class="btn" data-act="add" data-dest="deck" data-deck="${esc(d.id)}">＋ Cargar lista</button>
+        <button class="btn ghost" data-dkcopy>📋 Copiar lista</button>
+        <button class="btn ghost" data-deckren="${esc(d.id)}">Renombrar</button>
+        <button class="btn ghost" data-deckdel="${esc(d.id)}">Desarmar mazo</button>
+      </div>
+      <div class="dk-add">
+        <div class="ac"><input class="field" id="dkSearch" placeholder="＋ Agregar una carta al mazo…" autocomplete="off"></div>
+        <label class="foilck"><input type="checkbox" id="dkFoil"> ✨ Foil</label>
+      </div>
+      ${order.map((t) => `<h3 class="dk-group">${esc(RB.TYPE_ES[t] || (t === "Otro" ? "Otras" : t))} (${byType.get(t).reduce((s, r) => s + r.copies.length, 0)})</h3>
+        ${byType.get(t).sort((a, b) => a.c.n.localeCompare(b.c.n) || a.f - b.f).map(deckRowHtml).join("")}`).join("")
+      || `<p class="empty">${all.length ? "Ninguna carta del mazo coincide con la búsqueda." : "El mazo está vacío. Agregá cartas con el buscador o cargá una lista."}</p>`}
+      <p class="note">Con − la carta vuelve a casa. Con + se toma de casa y, si no hay, se suma a Mis cartas. Para jugar distintas versiones de una carta (por ejemplo 1 foil y 1 normal), usá «Cambiar 1 a otra versión».</p>`;
+    attachAC($("dkSearch"), (c) => deckAdd(d, c.id, $("dkFoil").checked));
+  }
+  function deckRowHtml(r) {
+    const n = r.copies.length;
+    const opts = versionsOf(r.id)
+      .flatMap((v) => [[v, false], [v, true]])
+      .filter(([v, fo]) => !(v.id === r.id && fo === r.f))
+      .map(([v, fo]) => `<option value="${esc(v.id)}|${fo ? 1 : 0}">${esc(versionLabel(v))}${fo ? " · ✨ Foil" : ""}</option>`)
+      .join("");
+    const col = r.copies.filter((cp) => cp.k === "col").length;
+    const bor = r.copies.filter((cp) => cp.k === "bor");
+    const extra = [];
+    if (col) extra.push(`${col} de tu colección`);
+    if (bor.length) extra.push(`${bor.length} prestada${bor.length > 1 ? "s" : ""} por ${[...new Set(bor.map((cp) => pname(cp.from)))].join(", ")}`);
+    return `<div class="dk-row" data-key="${esc(r.id)}|${r.f ? 1 : 0}">
+      <img src="${esc(r.c.img)}" alt="" data-open="${esc(r.id)}">
+      <div><div class="n">${esc(r.c.n)} ${r.f ? '<span class="foil">✨ Foil</span>' : ""}</div>
+        <div class="m">${esc(versionLabel(r.c))}${extra.length ? " · " + esc(extra.join(" · ")) : ""}</div></div>
+      <div class="stepper"><button class="btn" data-dk="-" aria-label="Sacar una">−</button><b>${n}</b><button class="btn" data-dk="+" aria-label="Agregar una">+</button></div>
+      <select class="field" data-dkver aria-label="Cambiar versión"><option value="">🔁 Cambiar 1 a otra versión…</option>${opts}</select>
+      <button class="btn ghost rm" data-dk="x">Sacar todas</button>
+    </div>`;
+  }
+  function deckAdd(d, id, foil) {
+    const got = take(id, 1, [
+      (cp) => cp.loc === "home" && cp.k === "mine" && !!cp.f === !!foil,
+      (cp) => cp.loc === "home" && cp.k === "col" && !!cp.f === !!foil,
+      (cp) => cp.loc === "home" && cp.k === "bor" && !!cp.f === !!foil,
+    ], foil);
+    const nm = (byId.get(id) || {}).n;
+    if (got.length) {
+      got[0].loc = "deck";
+      got[0].deck = d.id;
+      toast(`${nm}: la tomé de casa`);
+    } else {
+      newCopy(id, "mine", { loc: "deck", deck: d.id, f: foil || undefined });
+      toast(`${nm}: no estaba en casa, la sumé a Mis cartas`);
+    }
+    save();
+    renderDeck();
+    const s = $("dkSearch");
+    if (s) s.focus();
+  }
+  function deckRowCopies(row) {
+    const d = deck(view.deck);
+    const [id, fo] = row.dataset.key.split("|");
+    const list = D.copies.filter((cp) => cp.loc === "deck" && cp.deck === d.id && cp.c === id && !!cp.f === (fo === "1"));
+    // Primero las tuyas, al final las prestadas.
+    list.sort((a, b) => (a.k === "bor") - (b.k === "bor"));
+    return { d, id, foil: fo === "1", list };
+  }
+  $("main").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-dk]");
+    if (b) {
+      const { d, id, foil, list } = deckRowCopies(b.closest(".dk-row"));
+      if (b.dataset.dk === "+") return deckAdd(d, id, foil);
+      const out = b.dataset.dk === "x" ? list : list.slice(-1);
+      out.forEach((cp) => { cp.loc = "home"; delete cp.deck; });
+      save();
+      toast(out.length === 1 ? "Volvió a casa" : `${out.length} cartas volvieron a casa`);
+      return renderDeck();
+    }
+    if (e.target.closest("[data-dkcopy]")) {
+      const d = deck(view.deck);
+      const txt = deckRows(d)
+        .sort((a, b) => TYPE_ORDER.indexOf(a.c.t) - TYPE_ORDER.indexOf(b.c.t) || a.c.n.localeCompare(b.c.n))
+        .map((r) => `${r.copies.length} ${r.c.n}${r.c.code ? " (" + r.c.code.toUpperCase() + ")" : ""}${r.f ? " foil" : ""}`)
+        .join("\n");
+      navigator.clipboard.writeText(txt).then(() => toast("Lista del mazo copiada"), () => toast("No se pudo copiar"));
+    }
+  });
+  $("main").addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-dkver]");
+    if (!sel || !sel.value) return;
+    const { d, list } = deckRowCopies(sel.closest(".dk-row"));
+    const [tid, tf] = sel.value.split("|");
+    const foil = tf === "1";
+    const cur = list[0];
+    if (!cur) return;
+    // Si esa versión está en casa, se cambian de lugar; si no, se corrige la versión de esta copia.
+    const home = D.copies.find((cp) => cp.c === tid && !!cp.f === foil && cp.loc === "home" && cp.k !== "bor") ||
+      D.copies.find((cp) => cp.c === tid && !!cp.f === foil && cp.loc === "home");
+    const label = versionLabel(byId.get(tid)) + (foil ? " ✨ Foil" : "");
+    if (home) {
+      home.loc = "deck";
+      home.deck = d.id;
+      cur.loc = "home";
+      delete cur.deck;
+      toast(`Cambiada: la de ${label} vino de casa y la otra volvió a casa`);
+    } else {
+      cur.c = tid;
+      foil ? (cur.f = true) : delete cur.f;
+      toast(`Ahora es ${label}`);
+    }
+    save();
+    renderDeck();
+  });
 
   // ---------- Préstamos ----------
   function personStats(pid) {
@@ -707,7 +850,7 @@
     const mine = D.copies.filter((cp) => cp.c === id);
     const grp = new Map();
     for (const cp of mine) {
-      const key = [cp.k, cp.loc, cp.deck, cp.to, cp.from].join("|");
+      const key = [cp.k, cp.loc, cp.deck, cp.to, cp.from, cp.f ? 1 : 0].join("|");
       const g = grp.get(key) || { key, list: [] };
       g.list.push(cp);
       grp.set(key, g);
@@ -719,7 +862,7 @@
       const cp = g.list[0];
       const n = g.list.length;
       let what, acts = "";
-      const kindTxt = cp.k === "col" ? "Colección" : cp.k === "mine" ? "Mis cartas" : "";
+      const kindTxt = (cp.k === "col" ? "Colección" : cp.k === "mine" ? "Mis cartas" : "") + (cp.f ? " · ✨ Foil" : "");
       if (cp.k === "bor") {
         what = `🫴 Te la prestó <b>${esc(pname(cp.from))}</b> el ${fdate(cp.fs)} · ${cp.loc === "deck" ? "🃏 en " + esc(dname(cp.deck)) : "🏠 en casa"}`;
         acts = `${cp.loc === "deck" ? `<button class="btn" data-mv="${esc(cp.id)}" data-to="home">Sacar del mazo</button>` : deckOpts ? `<select class="field" data-mvsel="${esc(cp.id)}"><option value="">Poner en mazo…</option>${deckOpts}</select>` : ""}
@@ -739,6 +882,7 @@
         acts += `<button class="btn ghost" data-kind="${esc(cp.id)}">${cp.k === "mine" ? "Pasar a Colección" : "Pasar a Mis cartas"}</button>
           <button class="btn ghost" data-rm="${esc(cp.id)}" aria-label="Quitar una">🗑</button>`;
       }
+      acts += `<button class="btn ghost" data-foil="${esc(cp.id)}">${cp.f ? "Quitar foil a 1" : "✨ Marcar 1 como foil"}</button>`;
       if (vers.length > 1) {
         acts += `<select class="field" data-ver="${esc(g.list.map((x) => x.id).join(","))}" aria-label="Cambiar versión">
           <option value="">🔁 Cambiar versión…</option>
@@ -788,6 +932,9 @@
     } else if ((el = e.target.closest("[data-mv]"))) {
       const cp = D.copies.find((x) => x.id === el.dataset.mv);
       if (cp) { cp.loc = "home"; delete cp.deck; save(); refresh(); }
+    } else if ((el = e.target.closest("[data-foil]"))) {
+      const cp = D.copies.find((x) => x.id === el.dataset.foil);
+      if (cp) { cp.f ? delete cp.f : (cp.f = true); save(); refresh(); }
     } else if ((el = e.target.closest("[data-kind]"))) {
       const cp = D.copies.find((x) => x.id === el.dataset.kind);
       if (cp) { cp.k = cp.k === "mine" ? "col" : "mine"; save(); refresh(); }
@@ -924,6 +1071,8 @@
       : /\b(overnumbered|sobrenumerada|showcase)\b/i.test(l) ? "ov"
       : /\b(signature|firma|firmada)\b/i.test(l) ? "sig"
       : /\bmetal\b/i.test(l) ? "metal" : "";
+    const isFoil = /\b(foil|foileada|brillante)\b/i.test(l);
+    l = l.replace(/[(\[]?\b(foil|foileada|brillante|non[- ]?foil|no foil)\b[)\]]?/gi, " ").replace(/\s+/g, " ").trim();
     let cands = [], sure = false;
     const cm = codeRe && codeRe.exec(l);
     if (cm) {
@@ -962,7 +1111,7 @@
     }
     if (!cands.length && !hadQ) return null;
     if (!cands.length) return { orig: raw.trim(), q, cands: [], pick: null, sure: false, p };
-    return { orig: raw.trim(), q: Math.max(1, Math.min(999, q)), cands: cands.map((c) => c.id), pick: cands[0].id, sure, p };
+    return { orig: raw.trim(), q: Math.max(1, Math.min(999, q)), cands: cands.map((c) => c.id), pick: cands[0].id, sure, p, f: isFoil };
   }
 
   // Buscador de cartas con lista desplegable
@@ -1073,6 +1222,7 @@
           ${r.orig ? `<div class="orig">${!c ? "❌ " : !r.sure ? '<span class="warn">¿Es esta? </span>' : ""}«${esc(r.orig)}»</div>` : ""}
         </div>
         ${tx ? `<input class="field pp" type="number" min="0" step="any" placeholder="Precio c/u" value="${r.p ?? ""}" data-rpp aria-label="Precio por unidad">` : ""}
+        ${L.mode !== "sell" && c ? `<label class="foilck" title="Foil"><input type="checkbox" data-rf ${r.f ? "checked" : ""}> ✨ Foil</label>` : ""}
         <button class="x" data-rx aria-label="Quitar">×</button>
       </div>`;
     }).join("");
@@ -1156,6 +1306,7 @@
       if (t.hasAttribute("data-rq")) r.q = Math.max(1, Math.floor(Number(t.value) || 1));
       if (t.hasAttribute("data-rp")) { r.pick = t.value; r.sure = true; }
       if (t.hasAttribute("data-rpp")) r.p = t.value === "" ? null : Number(t.value);
+      if (t.hasAttribute("data-rf")) r.f = t.checked;
       return drawLoader();
     }
     const k = t.dataset.f;
@@ -1170,9 +1321,11 @@
   });
 
   // Saca copias por orden de preferencia.
-  function take(cardId, n, prefs) {
+  // f === true: solo foil · f falso: primero las no foil y después cualquiera.
+  function take(cardId, n, prefs, f) {
     const out = [];
-    for (const pr of prefs) {
+    const all = f ? prefs.map((pr) => (cp) => !!cp.f && pr(cp)) : prefs.map((pr) => (cp) => !cp.f && pr(cp)).concat(prefs);
+    for (const pr of all) {
       if (out.length >= n) break;
       for (const cp of D.copies) {
         if (out.length >= n) break;
@@ -1190,7 +1343,7 @@
     try {
       if (L.mode === "add") {
         if (L.dest === "mine" || L.dest === "col") {
-          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.dest); });
+          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.dest, r.f ? { f: true } : null); });
           lines.push(`Agregaste ${nc(rows.reduce((s, r) => s + r.q, 0))} a ${L.dest === "mine" ? "Mis cartas" : "Mi colección"} (🏠 en casa).`);
         } else if (L.dest === "deck") {
           let d = deck(L.deck);
@@ -1204,11 +1357,11 @@
               (cp) => cp.loc === "home" && cp.k === "mine",
               (cp) => cp.loc === "home" && cp.k === "col",
               (cp) => cp.loc === "home" && cp.k === "bor",
-            ]);
+            ], r.f);
             got.forEach((cp) => { cp.loc = "deck"; cp.deck = d.id; });
             const rest = r.q - got.length;
             if (rest > 0) {
-              if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "deck", deck: d.id }); created += rest; }
+              if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "deck", deck: d.id, f: r.f || undefined }); created += rest; }
               else missing.push(`${rest} × ${name(r.pick)}`);
             }
           }
@@ -1224,7 +1377,7 @@
           }
           const date = L.date || today();
           if (L.dest === "borrow") {
-            rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, "bor", { from: p.id, fs: date }); });
+            rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, "bor", { from: p.id, fs: date, f: r.f || undefined }); });
             lines.push(`Anotado: ${p.name} te prestó ${nc(rows.reduce((s, r) => s + r.q, 0))} el ${fdate(date)}.`);
           } else {
             const fromDecks = [], missing = [];
@@ -1234,14 +1387,14 @@
                 (cp) => cp.loc === "home" && cp.k === "mine",
                 (cp) => cp.loc === "home" && cp.k === "col",
                 (cp) => cp.loc === "deck" && cp.k !== "bor",
-              ]);
+              ], r.f);
               got.forEach((cp) => {
                 if (cp.loc === "deck") fromDecks.push(`${name(cp.c)} (salió del mazo ${dname(cp.deck)})`);
                 cp.loc = "loan"; cp.to = p.id; cp.ls = date; delete cp.deck;
               });
               const rest = r.q - got.length;
               if (rest > 0) {
-                if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "loan", to: p.id, ls: date }); created += rest; }
+                if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "loan", to: p.id, ls: date, f: r.f || undefined }); created += rest; }
                 else missing.push(`${rest} × ${name(r.pick)}`);
               }
             }
@@ -1263,7 +1416,7 @@
           await saveSaleLoc();
           lines.push(`Se sumaron ${nc(rows.reduce((s, r) => s + r.q, 0))} al stock de la tienda · ${SALE[L.sloc].i} ${SALE[L.sloc].l}.`);
         } else {
-          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.bdest); });
+          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.bdest, r.f ? { f: true } : null); });
           lines.push(`Se sumaron ${nc(rows.reduce((s, r) => s + r.q, 0))} a ${L.bdest === "mine" ? "Mis cartas (🏠 en casa)" : "Mi colección"}.`);
         }
         rows.forEach((r) => D.tx.push({ id: uid(), type: "buy", c: r.pick, q: r.q, p: r.p ?? null, d: date, who: L.who.trim(), dest: L.bdest, sloc: L.bdest === "sale" ? L.sloc : undefined, at: Date.now() }));
