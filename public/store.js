@@ -11,6 +11,7 @@
 
   const f = {
     q: "", sets: new Set(), doms: new Set(), types: new Set(), rars: new Set(), vars: new Set(),
+    langs: new Set(),
     eMin: null, eMax: null, pMin: null, pMax: null, inStock: false, sort: "rel",
   };
 
@@ -106,6 +107,8 @@
     const vlab = { normal: "Normal", alt: "Arte alternativo", sig: "Firma", ov: "Sobrenumerada" };
     const vars = ["normal", "alt", "sig", "ov"].filter((v) => count(vkey)(v) > 0);
     checkList($("fVars"), vars, f.vars, (v) => vlab[v], count(vkey));
+
+    checkList($("fLangs"), ["en", "cn"], f.langs, (v) => RB.LANGS[v], (v) => cards.filter((c) => RB.stock(c, inv, v) > 0).length);
   }
 
   const num = (v) => (v === "" || v === null || isNaN(Number(v)) ? null : Number(v));
@@ -134,6 +137,7 @@
       if (f.pMax !== null && p > f.pMax) return false;
     }
     if (f.inStock && RB.stock(c, inv) <= 0) return false;
+    if (f.langs.size && ![...f.langs].some((l) => RB.stock(c, inv, l) > 0)) return false;
     return true;
   }
 
@@ -164,6 +168,13 @@
     more();
   }
 
+  // "3" si es todo en inglés; "2 inglés · 1 chino" si hay de los dos; "1 chino" si es solo chino.
+  function stockText(c) {
+    const en = RB.stock(c, inv, "en"), cn = RB.stock(c, inv, "cn");
+    if (!cn) return String(en);
+    return (en ? en + " inglés · " : "") + cn + " chino";
+  }
+
   // ---------- Grilla ----------
   function tile(c) {
     const st = RB.stock(c, inv);
@@ -185,7 +196,7 @@
         <div class="row">
           <div>
             <div class="price">${RB.money(p, inv)}</div>
-            <div class="stock ${st > 0 ? "" : "no"}">${st > 0 ? "Stock: " + st : "Sin stock"}</div>
+            <div class="stock ${st > 0 ? "" : "no"}">${st > 0 ? "Stock: " + stockText(c) : "Sin stock"}</div>
           </div>
           <button class="btn primary add" data-add="${RB.esc(c.id)}" ${st > 0 ? "" : "disabled"}>Agregar</button>
         </div>
@@ -218,7 +229,9 @@
     const c = byId.get(id);
     if (!c) return;
     const st = RB.stock(c, inv);
-    const p = RB.effectivePrice(c, inv);
+    const langs = ["en", "cn"].filter((l) => RB.stock(c, inv, l) > 0);
+    let lang = langs[0] || "en";
+    const p = RB.effectivePrice(c, inv, lang);
     const stats = [];
     if (c.e !== null) stats.push(["Energía", c.e]);
     if (c.p !== null) stats.push(["Poder", c.p]);
@@ -237,8 +250,9 @@
       <div><img src="${RB.esc(c.img)}" alt="${RB.esc(c.n)}"></div>
       <div>
         <h2 id="mName">${RB.esc(c.n)}</h2>
-        <div class="price" style="font-size:22px">${RB.money(p, inv)}</div>
-        <div class="stock ${st > 0 ? "" : "no"}">${st > 0 ? st + " disponibles" : "Sin stock"}</div>
+        ${langs.length > 1 ? `<div class="langs" id="mLangs">${langs.map((l) => `<button class="chip" data-l="${l}" aria-pressed="${l === lang}">${RB.LANGS[l]} (${RB.stock(c, inv, l)})</button>`).join("")}</div>` : ""}
+        <div class="price" style="font-size:22px" id="mPrice">${RB.money(p, inv)}</div>
+        <div class="stock ${st > 0 ? "" : "no"}" id="mStock">${st > 0 ? RB.stock(c, inv, lang) + " disponibles en " + RB.LANGS[lang].toLowerCase() : "Sin stock"}</div>
         <dl class="kv">${rows.map(([k, val]) => `<dt>${k}</dt><dd>${RB.esc(val)}</dd>`).join("")}</dl>
         ${c.txt ? `<div class="ctext">${RB.esc(RB.cleanText(c.txt))}</div>` : ""}
         <div style="display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap">
@@ -249,29 +263,41 @@
     const qi = $("mQty");
     $("modalBody").querySelectorAll("[data-step]").forEach((b) =>
       b.addEventListener("click", () => {
-        qi.value = Math.max(1, Math.min(st || 1, (Number(qi.value) || 1) + Number(b.dataset.step)));
+        qi.value = Math.max(1, Math.min(RB.stock(c, inv, lang) || 1, (Number(qi.value) || 1) + Number(b.dataset.step)));
       })
     );
+    if ($("mLangs")) $("mLangs").onclick = (e) => {
+      const b = e.target.closest("[data-l]");
+      if (!b) return;
+      lang = b.dataset.l;
+      $("mLangs").querySelectorAll("[data-l]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      $("mPrice").textContent = RB.money(RB.effectivePrice(c, inv, lang), inv);
+      $("mStock").textContent = RB.stock(c, inv, lang) + " disponibles en " + RB.LANGS[lang].toLowerCase();
+      qi.value = 1;
+      qi.max = RB.stock(c, inv, lang);
+    };
     $("mAdd").onclick = () => {
-      addToCart(c.id, Math.max(1, Number(qi.value) || 1));
+      addToCart(c.id, Math.max(1, Number(qi.value) || 1), lang);
       close();
     };
     open("modal");
   }
 
   // ---------- Carrito ----------
-  function inCart(id) {
-    const it = cart.find((x) => x.id === id);
+  const cl = (x) => x.l || "en";
+  function inCart(id, l) {
+    const it = cart.find((x) => x.id === id && cl(x) === l);
     return it ? it.q : 0;
   }
-  function addToCart(id, q = 1) {
+  function addToCart(id, q = 1, l) {
     const c = byId.get(id);
-    const max = RB.stock(c, inv);
-    const cur = inCart(id);
+    if (!l) l = RB.stock(c, inv, "en") - inCart(id, "en") > 0 ? "en" : "cn";
+    const max = RB.stock(c, inv, l);
+    const cur = inCart(id, l);
     const want = Math.min(max, cur + q);
     if (want <= cur) return toast("No hay más stock de esta carta");
-    const it = cart.find((x) => x.id === id);
-    it ? (it.q = want) : cart.push({ id, q: want });
+    const it = cart.find((x) => x.id === id && cl(x) === l);
+    it ? (it.q = want) : cart.push({ id, l, q: want });
     saveCart();
     toast("Agregada: " + c.n);
   }
@@ -290,13 +316,14 @@
       $("cartBody").innerHTML = cart
         .map((x) => {
           const c = byId.get(x.id);
-          const p = RB.effectivePrice(c, inv);
+          const p = RB.effectivePrice(c, inv, cl(x));
           if (p === null) unknown = true;
           else total += p * x.q;
+          const key = RB.esc(x.id + "|" + cl(x));
           return `<div class="citem">
             <img src="${RB.esc(c.img)}" alt="">
-            <div><div class="n">${RB.esc(c.n)}</div><div class="s">${RB.esc(c.sl || c.s)} · ${RB.money(p, inv)} c/u</div></div>
-            <div class="qty"><button data-cq="${RB.esc(x.id)}" data-d="-1" aria-label="Menos">−</button><input value="${x.q}" readonly aria-label="Cantidad"><button data-cq="${RB.esc(x.id)}" data-d="1" aria-label="Más">+</button></div>
+            <div><div class="n">${RB.esc(c.n)}</div><div class="s">${RB.esc(c.sl || c.s)}${cl(x) === "cn" ? " · <b>Chino</b>" : ""} · ${RB.money(p, inv)} c/u</div></div>
+            <div class="qty"><button data-cq="${key}" data-d="-1" aria-label="Menos">−</button><input value="${x.q}" readonly aria-label="Cantidad"><button data-cq="${key}" data-d="1" aria-label="Más">+</button></div>
           </div>`;
         })
         .join("");
@@ -311,16 +338,18 @@
   $("cartBody").addEventListener("click", (e) => {
     const b = e.target.closest("[data-cq]");
     if (!b) return;
-    const it = cart.find((x) => x.id === b.dataset.cq);
-    const max = RB.stock(byId.get(it.id), inv);
+    const [cid, l] = b.dataset.cq.split("|");
+    const it = cart.find((x) => x.id === cid && cl(x) === l);
+    if (!it) return;
+    const max = RB.stock(byId.get(it.id), inv, l);
     it.q = Math.max(0, Math.min(max, it.q + Number(b.dataset.d)));
     saveCart();
   });
   $("sendWa").addEventListener("click", () => {
     const lines = cart.map((x) => {
       const c = byId.get(x.id);
-      const p = RB.effectivePrice(c, inv);
-      return `• ${x.q} x ${c.n} (${c.sl || c.s}${c.num !== null ? " #" + c.num : ""}) - ${RB.money(p, inv)} c/u`;
+      const p = RB.effectivePrice(c, inv, cl(x));
+      return `• ${x.q} x ${c.n} (${c.sl || c.s}${c.num !== null ? " #" + c.num : ""})${cl(x) === "cn" ? " [CHINO]" : ""} - ${RB.money(p, inv)} c/u`;
     });
     const name = $("custName").value.trim();
     const msg =

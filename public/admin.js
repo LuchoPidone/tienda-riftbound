@@ -98,8 +98,9 @@
       if (q > 0) {
         refs++;
         units += q;
-        const p = RB.effectivePrice(c, inv);
-        if (p !== null) value += p * q;
+        const p = RB.effectivePrice(c, inv, "en"), pcn = RB.effectivePrice(c, inv, "cn");
+        if (p !== null) value += p * RB.stock(c, inv, "en");
+        if (pcn !== null) value += pcn * RB.stock(c, inv, "cn");
       }
     }
     $("stats").innerHTML =
@@ -136,11 +137,17 @@
         <div class="m">${RB.esc(c.sl || c.s)}${c.num !== null ? " #" + c.num : ""} · ${RB.esc(RB.RARITY_ES[c.r] || c.r)}${v.length ? " · " + RB.esc(v.join(", ")) : ""}</div>
       </div>
       <div class="ctl">
-        <div><label>Cantidad</label>
-          <div class="qty"><button data-d="-1" aria-label="Menos">−</button><input class="q" type="number" min="0" value="${it.q || 0}" aria-label="Cantidad"><button data-d="1" aria-label="Más">+</button></div>
+        <div><label>Inglés</label>
+          <div class="qty"><button data-d="-1" aria-label="Menos">−</button><input class="q" type="number" min="0" value="${it.q || 0}" aria-label="Cantidad en inglés"><button data-d="1" aria-label="Más">+</button></div>
         </div>
         <div><label>Precio</label>
           <input class="pinput p" type="number" min="0" step="any" value="${it.p ?? ""}" placeholder="${rp !== undefined ? rp : "Consultar"}" title="Vacío = precio por rareza" aria-label="Precio">
+        </div>
+        <div><label>Chino</label>
+          <div class="qty"><button data-d="-1" data-l="cn" aria-label="Menos">−</button><input class="qc" type="number" min="0" value="${it.qc || 0}" aria-label="Cantidad en chino"><button data-d="1" data-l="cn" aria-label="Más">+</button></div>
+        </div>
+        <div><label>Precio chino</label>
+          <input class="pinput pc" type="number" min="0" step="any" value="${it.pc ?? ""}" placeholder="= inglés" title="Vacío = mismo precio que en inglés" aria-label="Precio en chino">
         </div>
         <div><label>Dónde está</label>
           <select class="lsel loc" aria-label="Dónde la guardás">
@@ -174,15 +181,18 @@
     const b = e.target.closest("[data-d]");
     if (!b) return;
     const r = b.closest(".r");
-    const inp = r.querySelector(".q");
+    const cn = b.dataset.l === "cn";
+    const inp = r.querySelector(cn ? ".qc" : ".q");
     inp.value = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d));
-    setItem(r.dataset.id, { q: Number(inp.value) });
+    setItem(r.dataset.id, cn ? { qc: Number(inp.value) } : { q: Number(inp.value) });
     r.classList.add("dirty");
   });
   $("rows").addEventListener("input", (e) => {
     const r = e.target.closest(".r");
     if (!r) return;
     if (e.target.classList.contains("q")) setItem(r.dataset.id, { q: Math.max(0, Math.floor(Number(e.target.value) || 0)) });
+    if (e.target.classList.contains("qc")) setItem(r.dataset.id, { qc: Math.max(0, Math.floor(Number(e.target.value) || 0)) });
+    if (e.target.classList.contains("pc")) setItem(r.dataset.id, { pc: e.target.value === "" ? null : Number(e.target.value) });
     if (e.target.classList.contains("loc")) {
       if (e.target.value) saleLoc[r.dataset.id] = e.target.value;
       else delete saleLoc[r.dataset.id];

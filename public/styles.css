@@ -182,3 +182,5 @@ select.field { width: auto; }
   .top-in { flex-wrap: wrap; }
   .search { order: 3; flex-basis: 100%; }
 }
+
+.langs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }

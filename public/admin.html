@@ -17,7 +17,7 @@
   .filters .field { width: auto; }
   .filters input[type=search] { flex: 1; min-width: 200px; }
   .rows { display: flex; flex-direction: column; gap: 8px; }
-  .r { display: grid; grid-template-columns: 46px 1fr auto auto auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .r { display: grid; grid-template-columns: 46px 1fr auto auto auto auto auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
   .r.dirty { border-color: var(--accent); }
   .r img { width: 46px; border-radius: 5px; }
   .r .n { font-weight: 600; }
@@ -41,7 +41,7 @@
   .stats b { color: var(--text); }
   @media (max-width: 640px) {
     .r { grid-template-columns: 40px 1fr; }
-    .r .ctl { grid-column: 1 / -1; display: flex; gap: 12px; }
+    .r .ctl { grid-column: 1 / -1; display: flex; gap: 12px; flex-wrap: wrap; }
   }
 </style>
 </head>

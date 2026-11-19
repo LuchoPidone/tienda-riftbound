@@ -30,7 +30,7 @@
   let sortBy = "name";
 
   const f = {
-    q: "", locs: new Set(), sets: new Set(), doms: new Set(), types: new Set(), rars: new Set(), vars: new Set(),
+    q: "", locs: new Set(), langs: new Set(), sets: new Set(), doms: new Set(), types: new Set(), rars: new Set(), vars: new Set(),
     eMin: null, eMax: null, pMin: null, pMax: null,
   };
 
@@ -56,7 +56,10 @@
   const deck = (id) => D.decks.find((d) => d.id === id);
   const pname = (id) => (person(id) || {}).name || "?";
   const dname = (id) => (deck(id) || {}).name || "?";
-  const stockOf = (id) => ((inv.items || {})[id] || {}).q || 0;
+  const stockOf = (id) => { const it = (inv.items || {})[id] || {}; return (it.q || 0) + (it.qc || 0); };
+  // Idioma de cada copia física: inglés (por defecto) o chino.
+  const lg = (x) => (x && x.l === "cn" ? "cn" : "en");
+  const CN = "🇨🇳 Chino";
   const isLate = (cp) => cp.loc === "loan" && daysSince(cp.ls) > LATE_DAYS;
 
   function cardMeta(c) {
@@ -213,6 +216,7 @@
     checkList($("fRars"), RB.uniqueSorted(cards, (c) => c.r, (a, b) => RB.rarityRank(a) - RB.rarityRank(b)), f.rars, (v) => RB.RARITY_ES[v] || v);
     const vlab = { normal: "Normal", alt: "Arte alternativo", sig: "Firma", ov: "Sobrenumerada" };
     checkList($("fVars"), ["normal", "alt", "sig", "ov"], f.vars, (v) => vlab[v]);
+    checkList($("fLangs"), ["en", "cn"], f.langs, (v) => RB.LANGS[v]);
   }
   const num = (v) => (v === "" || v === null || isNaN(Number(v)) ? null : Number(v));
 
@@ -252,9 +256,14 @@
     if (f.locs.has("sale") && g.stock > 0) return true;
     return false;
   }
+  function langMatches(g) {
+    if (!f.langs.size) return true;
+    if (g.copies.some((cp) => f.langs.has(lg(cp)))) return true;
+    return [...f.langs].some((l) => RB.stock(g.c, inv, l) > 0 && tab === "todo");
+  }
 
   $("clear").addEventListener("click", () => {
-    ["locs", "sets", "doms", "types", "rars", "vars"].forEach((k) => f[k].clear());
+    ["locs", "langs", "sets", "doms", "types", "rars", "vars"].forEach((k) => f[k].clear());
     ["eMin", "eMax", "pMin", "pMax"].forEach((k) => { f[k] = null; $(k).value = ""; });
     f.q = "";
     $("q").value = "";
@@ -372,11 +381,11 @@
     } else {
       m = groups(() => true);
       for (const [id, it] of Object.entries(inv.items || {})) {
-        if (it.q > 0 && !m.has(id) && byId.has(id)) m.set(id, { c: byId.get(id), id, copies: [], stock: it.q });
+        if (stockOf(id) > 0 && !m.has(id) && byId.has(id)) m.set(id, { c: byId.get(id), id, copies: [], stock: stockOf(id) });
       }
       head = `<div class="sechead"><h2>📍 Dónde está cada carta</h2></div>`;
     }
-    list = [...m.values()].filter((g) => cardMatches(g.c) && locMatches(g));
+    list = [...m.values()].filter((g) => cardMatches(g.c) && locMatches(g) && langMatches(g));
     const byNum = (a, b) => a.c.s.localeCompare(b.c.s) || (a.c.num ?? 0) - (b.c.num ?? 0) || a.c.n.localeCompare(b.c.n);
     const cnt = (g) => g.copies.length + (tab === "todo" ? g.stock : 0);
     const sorters = {
@@ -419,18 +428,20 @@
       m.set(key, x);
     };
     for (const cp of g.copies) {
-      const col = (cp.k === "col" ? " · Col." : "") + (cp.f ? " ✨" : "");
+      const col = (cp.k === "col" ? " · Col." : "") + (cp.f ? " ✨" : "") + (lg(cp) === "cn" ? " · CN" : "");
       if (cp.k === "bor") {
         const where = cp.loc === "deck" ? ` · 🃏 ${dname(cp.deck)}` : "";
-        add("b" + cp.from + cp.loc + cp.deck + !!cp.f, "bor", `🫴 De ${pname(cp.from)}${where}${cp.f ? " ✨" : ""}`);
-      } else if (cp.loc === "home") add("h" + cp.k + !!cp.f, "home", "🏠 En casa" + col);
-      else if (cp.loc === "deck") add("d" + cp.deck + cp.k + !!cp.f, "deck", `🃏 ${dname(cp.deck)}${col}`);
-      else if (cp.loc === "loan") add("l" + cp.to + isLate(cp) + !!cp.f, isLate(cp) ? "late" : "loan", `${isLate(cp) ? "⚠️" : "🤝"} ${pname(cp.to)}${cp.f ? " ✨" : ""}`);
+        add("b" + cp.from + cp.loc + cp.deck + !!cp.f + lg(cp), "bor", `🫴 De ${pname(cp.from)}${where}${cp.f ? " ✨" : ""}${lg(cp) === "cn" ? " · CN" : ""}`);
+      } else if (cp.loc === "home") add("h" + cp.k + !!cp.f + lg(cp), "home", "🏠 En casa" + col);
+      else if (cp.loc === "deck") add("d" + cp.deck + cp.k + !!cp.f + lg(cp), "deck", `🃏 ${dname(cp.deck)}${col}`);
+      else if (cp.loc === "loan") add("l" + cp.to + isLate(cp) + !!cp.f + lg(cp), isLate(cp) ? "late" : "loan", `${isLate(cp) ? "⚠️" : "🤝"} ${pname(cp.to)}${cp.f ? " ✨" : ""}${lg(cp) === "cn" ? " · CN" : ""}`);
     }
     let html = [...m.values()].map((x) => `<span class="loc ${x.cls}">${esc(x.label)}${x.n > 1 ? " ×" + x.n : ""}</span>`).join("");
     if (showStock && g.stock > 0) {
       const sl = SALE[saleLoc[g.id]];
-      html += `<span class="loc sale">🏷️ En venta ×${g.stock}${sl ? " · " + sl.i + " " + sl.l : ""}</span>`;
+      const it = inv.items[g.id] || {};
+      const split = it.qc ? ` (${it.q ? it.q + " EN · " : ""}${it.qc} CN)` : "";
+      html += `<span class="loc sale">🏷️ En venta ×${g.stock}${split}${sl ? " · " + sl.i + " " + sl.l : ""}</span>`;
     }
     return html;
   }
@@ -484,9 +495,9 @@
     const m = new Map();
     for (const cp of D.copies) {
       if (cp.loc !== "deck" || cp.deck !== d.id) continue;
-      const key = cp.c + "|" + (cp.f ? 1 : 0);
+      const key = cp.c + "|" + (cp.f ? 1 : 0) + "|" + lg(cp);
       let r = m.get(key);
-      if (!r) m.set(key, (r = { c: byId.get(cp.c), id: cp.c, f: !!cp.f, copies: [] }));
+      if (!r) m.set(key, (r = { c: byId.get(cp.c), id: cp.c, f: !!cp.f, l: lg(cp), copies: [] }));
       r.copies.push(cp);
     }
     return [...m.values()].filter((r) => r.c);
@@ -517,12 +528,13 @@
       <div class="dk-add">
         <div class="ac"><input class="field" id="dkSearch" placeholder="＋ Agregar una carta al mazo…" autocomplete="off"></div>
         <label class="foilck"><input type="checkbox" id="dkFoil"> ✨ Foil</label>
+        <label class="foilck"><input type="checkbox" id="dkCn"> 🇨🇳 Chino</label>
       </div>
       ${order.map((t) => `<h3 class="dk-group">${esc(RB.TYPE_ES[t] || (t === "Otro" ? "Otras" : t))} (${byType.get(t).reduce((s, r) => s + r.copies.length, 0)})</h3>
-        ${byType.get(t).sort((a, b) => a.c.n.localeCompare(b.c.n) || a.f - b.f).map(deckRowHtml).join("")}`).join("")
+        ${byType.get(t).sort((a, b) => a.c.n.localeCompare(b.c.n) || a.f - b.f || a.l.localeCompare(b.l)).map(deckRowHtml).join("")}`).join("")
       || `<p class="empty">${all.length ? "Ninguna carta del mazo coincide con la búsqueda." : "El mazo está vacío. Agregá cartas con el buscador o cargá una lista."}</p>`}
       <p class="note">Con − la carta vuelve a casa. Con + se toma de casa y, si no hay, se suma a Mis cartas. Para jugar distintas versiones de una carta (por ejemplo 1 foil y 1 normal), usá «Cambiar 1 a otra versión».</p>`;
-    attachAC($("dkSearch"), (c) => deckAdd(d, c.id, $("dkFoil").checked));
+    attachAC($("dkSearch"), (c) => deckAdd(d, c.id, $("dkFoil").checked, $("dkCn").checked ? "cn" : "en"));
   }
   function deckRowHtml(r) {
     const n = r.copies.length;
@@ -536,29 +548,30 @@
     const extra = [];
     if (col) extra.push(`${col} de tu colección`);
     if (bor.length) extra.push(`${bor.length} prestada${bor.length > 1 ? "s" : ""} por ${[...new Set(bor.map((cp) => pname(cp.from)))].join(", ")}`);
-    return `<div class="dk-row" data-key="${esc(r.id)}|${r.f ? 1 : 0}">
+    return `<div class="dk-row" data-key="${esc(r.id)}|${r.f ? 1 : 0}|${r.l}">
       <img src="${esc(r.c.img)}" alt="" data-open="${esc(r.id)}">
-      <div><div class="n">${esc(r.c.n)} ${r.f ? '<span class="foil">✨ Foil</span>' : ""}</div>
+      <div><div class="n">${esc(r.c.n)} ${r.f ? '<span class="foil">✨ Foil</span>' : ""} ${r.l === "cn" ? '<span class="foil">🇨🇳 Chino</span>' : ""}</div>
         <div class="m">${esc(versionLabel(r.c))}${extra.length ? " · " + esc(extra.join(" · ")) : ""}</div></div>
       <div class="stepper"><button class="btn" data-dk="-" aria-label="Sacar una">−</button><b>${n}</b><button class="btn" data-dk="+" aria-label="Agregar una">+</button></div>
       <select class="field" data-dkver aria-label="Cambiar versión"><option value="">🔁 Cambiar 1 a otra versión…</option>${opts}</select>
+      <button class="btn ghost rm" data-dk="lang">${r.l === "cn" ? "Pasar 1 a inglés" : "🇨🇳 Pasar 1 a chino"}</button>
       <button class="btn ghost rm" data-dk="x">Sacar todas</button>
     </div>`;
   }
-  function deckAdd(d, id, foil) {
+  function deckAdd(d, id, foil, lang) {
     if (foilOnly(byId.get(id))) foil = false;
     const got = take(id, 1, [
       (cp) => cp.loc === "home" && cp.k === "mine" && !!cp.f === !!foil,
       (cp) => cp.loc === "home" && cp.k === "col" && !!cp.f === !!foil,
       (cp) => cp.loc === "home" && cp.k === "bor" && !!cp.f === !!foil,
-    ], foil);
+    ], foil, lang);
     const nm = (byId.get(id) || {}).n;
     if (got.length) {
       got[0].loc = "deck";
       got[0].deck = d.id;
       toast(`${nm}: la tomé de casa`);
     } else {
-      newCopy(id, "mine", { loc: "deck", deck: d.id, f: foil || undefined });
+      newCopy(id, "mine", { loc: "deck", deck: d.id, f: foil, l: lang });
       toast(`${nm}: no estaba en casa, la sumé a Mis cartas`);
     }
     save();
@@ -568,17 +581,33 @@
   }
   function deckRowCopies(row) {
     const d = deck(view.deck);
-    const [id, fo] = row.dataset.key.split("|");
-    const list = D.copies.filter((cp) => cp.loc === "deck" && cp.deck === d.id && cp.c === id && !!cp.f === (fo === "1"));
+    const [id, fo, l] = row.dataset.key.split("|");
+    const list = D.copies.filter((cp) => cp.loc === "deck" && cp.deck === d.id && cp.c === id && !!cp.f === (fo === "1") && lg(cp) === l);
     // Primero las tuyas, al final las prestadas.
     list.sort((a, b) => (a.k === "bor") - (b.k === "bor"));
-    return { d, id, foil: fo === "1", list };
+    return { d, id, foil: fo === "1", lang: l, list };
   }
   $("main").addEventListener("click", (e) => {
     const b = e.target.closest("[data-dk]");
     if (b) {
-      const { d, id, foil, list } = deckRowCopies(b.closest(".dk-row"));
-      if (b.dataset.dk === "+") return deckAdd(d, id, foil);
+      const { d, id, foil, lang, list } = deckRowCopies(b.closest(".dk-row"));
+      if (b.dataset.dk === "+") return deckAdd(d, id, foil, lang);
+      if (b.dataset.dk === "lang") {
+        // Si la del otro idioma está en casa, se cambian de lugar; si no, se corrige el idioma de esta copia.
+        const other = lang === "cn" ? "en" : "cn";
+        const cur = list[0];
+        const home = D.copies.find((cp) => cp.c === id && !!cp.f === foil && lg(cp) === other && cp.loc === "home" && cp.k !== "bor");
+        if (home) {
+          home.loc = "deck"; home.deck = d.id;
+          cur.loc = "home"; delete cur.deck;
+          toast(`Cambiada: la de ${other === "cn" ? "chino" : "inglés"} vino de casa`);
+        } else {
+          other === "cn" ? (cur.l = "cn") : delete cur.l;
+          toast(`Ahora es en ${other === "cn" ? "chino" : "inglés"}`);
+        }
+        save();
+        return renderDeck();
+      }
       const out = b.dataset.dk === "x" ? list : list.slice(-1);
       out.forEach((cp) => { cp.loc = "home"; delete cp.deck; });
       save();
@@ -589,7 +618,7 @@
       const d = deck(view.deck);
       const txt = deckRows(d)
         .sort((a, b) => TYPE_ORDER.indexOf(a.c.t) - TYPE_ORDER.indexOf(b.c.t) || a.c.n.localeCompare(b.c.n))
-        .map((r) => `${r.copies.length} ${r.c.n}${r.c.code ? " (" + r.c.code.toUpperCase() + ")" : ""}${r.f ? " foil" : ""}`)
+        .map((r) => `${r.copies.length} ${r.c.n}${r.c.code ? " (" + r.c.code.toUpperCase() + ")" : ""}${r.f ? " foil" : ""}${r.l === "cn" ? " chino" : ""}`)
         .join("\n");
       navigator.clipboard.writeText(txt).then(() => toast("Lista del mazo copiada"), () => toast("No se pudo copiar"));
     }
@@ -597,14 +626,14 @@
   $("main").addEventListener("change", (e) => {
     const sel = e.target.closest("[data-dkver]");
     if (!sel || !sel.value) return;
-    const { d, list } = deckRowCopies(sel.closest(".dk-row"));
+    const { d, list, lang } = deckRowCopies(sel.closest(".dk-row"));
     const [tid, tf] = sel.value.split("|");
     const foil = tf === "1" && !foilOnly(byId.get(tid));
     const cur = list[0];
     if (!cur) return;
     // Si esa versión está en casa, se cambian de lugar; si no, se corrige la versión de esta copia.
-    const home = D.copies.find((cp) => cp.c === tid && !!cp.f === foil && cp.loc === "home" && cp.k !== "bor") ||
-      D.copies.find((cp) => cp.c === tid && !!cp.f === foil && cp.loc === "home");
+    const home = D.copies.find((cp) => cp.c === tid && !!cp.f === foil && lg(cp) === lang && cp.loc === "home" && cp.k !== "bor") ||
+      D.copies.find((cp) => cp.c === tid && !!cp.f === foil && lg(cp) === lang && cp.loc === "home");
     const label = versionLabel(byId.get(tid)) + (foil ? " ✨ Foil" : "");
     if (home) {
       home.loc = "deck";
@@ -742,6 +771,7 @@
     const buy = t.type === "buy";
     const total = t.p === null || t.p === undefined ? null : t.p * t.q;
     const extra = [fdate(t.d)];
+    if (lg(t) === "cn") extra.push("chino");
     if (t.who) extra.push((buy ? "se la compraste a " : "se la vendiste a ") + t.who);
     if (buy && DEST[t.dest]) extra.push(DEST[t.dest] + (t.dest === "sale" && SALE[t.sloc] ? " " + SALE[t.sloc].i : ""));
     if (!buy && t.src) extra.push(t.src);
@@ -843,6 +873,7 @@
   function newCopy(c, k, extra) {
     const cp = Object.assign({ id: uid(), c, k, loc: "home", added: Date.now() }, extra || {});
     if (!cp.f || foilOnly(byId.get(c))) delete cp.f;
+    if (cp.l !== "cn") delete cp.l;
     D.copies.push(cp);
     return cp;
   }
@@ -856,7 +887,7 @@
     const mine = D.copies.filter((cp) => cp.c === id);
     const grp = new Map();
     for (const cp of mine) {
-      const key = [cp.k, cp.loc, cp.deck, cp.to, cp.from, cp.f ? 1 : 0].join("|");
+      const key = [cp.k, cp.loc, cp.deck, cp.to, cp.from, cp.f ? 1 : 0, lg(cp)].join("|");
       const g = grp.get(key) || { key, list: [] };
       g.list.push(cp);
       grp.set(key, g);
@@ -868,7 +899,7 @@
       const cp = g.list[0];
       const n = g.list.length;
       let what, acts = "";
-      const kindTxt = (cp.k === "col" ? "Colección" : cp.k === "mine" ? "Mis cartas" : "") + (cp.f ? " · ✨ Foil" : "");
+      const kindTxt = (cp.k === "col" ? "Colección" : cp.k === "mine" ? "Mis cartas" : "") + (cp.f ? " · ✨ Foil" : "") + (lg(cp) === "cn" ? " · " + CN : "");
       if (cp.k === "bor") {
         what = `🫴 Te la prestó <b>${esc(pname(cp.from))}</b> el ${fdate(cp.fs)} · ${cp.loc === "deck" ? "🃏 en " + esc(dname(cp.deck)) : "🏠 en casa"}`;
         acts = `${cp.loc === "deck" ? `<button class="btn" data-mv="${esc(cp.id)}" data-to="home">Sacar del mazo</button>` : deckOpts ? `<select class="field" data-mvsel="${esc(cp.id)}"><option value="">Poner en mazo…</option>${deckOpts}</select>` : ""}
@@ -888,6 +919,7 @@
         acts += `<button class="btn ghost" data-kind="${esc(cp.id)}">${cp.k === "mine" ? "Pasar a Colección" : "Pasar a Mis cartas"}</button>
           <button class="btn ghost" data-rm="${esc(cp.id)}" aria-label="Quitar una">🗑</button>`;
       }
+      acts += `<button class="btn ghost" data-lang="${esc(cp.id)}">${lg(cp) === "cn" ? "Pasar 1 a inglés" : "🇨🇳 Pasar 1 a chino"}</button>`;
       if (!foilOnly(c)) acts += `<button class="btn ghost" data-foil="${esc(cp.id)}">${cp.f ? "Quitar foil a 1" : "✨ Marcar 1 como foil"}</button>`;
       if (vers.length > 1) {
         acts += `<select class="field" data-ver="${esc(g.list.map((x) => x.id).join(","))}" aria-label="Cambiar versión">
@@ -913,7 +945,7 @@
           <button class="btn" data-act="sell" data-card="${esc(id)}">💰 Vendí</button>
         </div>
         <h3 class="sub">En venta en la tienda</h3>
-        <div class="cp"><span class="what">${st > 0 ? `<b>${st}</b> en stock · ${money(RB.effectivePrice(c, inv))}` : "Sin stock en la tienda"}</span>
+        <div class="cp"><span class="what">${st > 0 ? `<b>${st}</b> en stock${(inv.items[id] || {}).qc ? ` (${(inv.items[id] || {}).q || 0} inglés · ${(inv.items[id] || {}).qc} chino)` : ""} · ${money(RB.effectivePrice(c, inv))}` : "Sin stock en la tienda"}</span>
           <select class="field" id="sl" aria-label="Dónde la guardás">
             <option value="">¿Dónde la guardás?</option>
             ${Object.entries(SALE).map(([k, v]) => `<option value="${k}" ${saleLoc[id] === k ? "selected" : ""}>${v.i} ${v.l}</option>`).join("")}
@@ -938,6 +970,9 @@
     } else if ((el = e.target.closest("[data-mv]"))) {
       const cp = D.copies.find((x) => x.id === el.dataset.mv);
       if (cp) { cp.loc = "home"; delete cp.deck; save(); refresh(); }
+    } else if ((el = e.target.closest("[data-lang]"))) {
+      const cp = D.copies.find((x) => x.id === el.dataset.lang);
+      if (cp) { lg(cp) === "cn" ? delete cp.l : (cp.l = "cn"); save(); refresh(); }
     } else if ((el = e.target.closest("[data-foil]"))) {
       const cp = D.copies.find((x) => x.id === el.dataset.foil);
       if (cp) { cp.f ? delete cp.f : (cp.f = true); save(); refresh(); }
@@ -1082,6 +1117,8 @@
       : /\b(signature|firma|firmada)\b/i.test(l) ? "sig"
       : /\bmetal\b/i.test(l) ? "metal" : "";
     const isFoil = /\b(foil|foileada|brillante)\b/i.test(l);
+    const isCn = /(\b(chino|china|chinese|cn|zh)\b|中文)/i.test(l);
+    l = l.replace(/[(\[]?(\b(chino|china|chinese|cn|zh|ingl[eé]s|english|en)\b|中文)[)\]]?/gi, " ").replace(/\s+/g, " ").trim();
     l = l.replace(/[(\[]?\b(foil|foileada|brillante|non[- ]?foil|no foil)\b[)\]]?/gi, " ").replace(/\s+/g, " ").trim();
     let cands = [], sure = false;
     const cm = codeRe && codeRe.exec(l);
@@ -1121,7 +1158,7 @@
     }
     if (!cands.length && !hadQ) return null;
     if (!cands.length) return { orig: raw.trim(), q, cands: [], pick: null, sure: false, p };
-    return { orig: raw.trim(), q: Math.max(1, Math.min(999, q)), cands: cands.map((c) => c.id), pick: cands[0].id, sure, p, f: isFoil };
+    return { orig: raw.trim(), q: Math.max(1, Math.min(999, q)), cands: cands.map((c) => c.id), pick: cands[0].id, sure, p, f: isFoil, l: isCn ? "cn" : undefined };
   }
 
   // Buscador de cartas con lista desplegable
@@ -1232,6 +1269,7 @@
           ${r.orig ? `<div class="orig">${!c ? "❌ " : !r.sure ? '<span class="warn">¿Es esta? </span>' : ""}«${esc(r.orig)}»</div>` : ""}
         </div>
         ${tx ? `<input class="field pp" type="number" min="0" step="any" placeholder="Precio c/u" value="${r.p ?? ""}" data-rpp aria-label="Precio por unidad">` : ""}
+        ${c ? `<select class="field lsel" data-rl aria-label="Idioma"><option value="en">Inglés</option><option value="cn" ${lg(r) === "cn" ? "selected" : ""}>🇨🇳 Chino</option></select>` : ""}
         ${L.mode !== "sell" && c && !foilOnly(c) ? `<label class="foilck" title="Foil"><input type="checkbox" data-rf ${r.f ? "checked" : ""}> ✨ Foil</label>` : ""}
         <button class="x" data-rx aria-label="Quitar">×</button>
       </div>`;
@@ -1317,6 +1355,7 @@
       if (t.hasAttribute("data-rp")) { r.pick = t.value; r.sure = true; }
       if (t.hasAttribute("data-rpp")) r.p = t.value === "" ? null : Number(t.value);
       if (t.hasAttribute("data-rf")) r.f = t.checked;
+      if (t.hasAttribute("data-rl")) r.l = t.value === "cn" ? "cn" : undefined;
       return drawLoader();
     }
     const k = t.dataset.f;
@@ -1332,9 +1371,11 @@
 
   // Saca copias por orden de preferencia.
   // f === true: solo foil · f falso: primero las no foil y después cualquiera.
-  function take(cardId, n, prefs, f) {
+  function take(cardId, n, prefs, f, l) {
     if (foilOnly(byId.get(cardId))) f = false;
     const out = [];
+    const L0 = l === "cn" ? "cn" : "en";
+    prefs = prefs.map((pr) => (cp) => lg(cp) === L0 && pr(cp));
     const all = f ? prefs.map((pr) => (cp) => !!cp.f && pr(cp)) : prefs.map((pr) => (cp) => !cp.f && pr(cp)).concat(prefs);
     for (const pr of all) {
       if (out.length >= n) break;
@@ -1354,7 +1395,7 @@
     try {
       if (L.mode === "add") {
         if (L.dest === "mine" || L.dest === "col") {
-          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.dest, r.f ? { f: true } : null); });
+          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.dest, { f: r.f, l: r.l }); });
           lines.push(`Agregaste ${nc(rows.reduce((s, r) => s + r.q, 0))} a ${L.dest === "mine" ? "Mis cartas" : "Mi colección"} (🏠 en casa).`);
         } else if (L.dest === "deck") {
           let d = deck(L.deck);
@@ -1368,11 +1409,11 @@
               (cp) => cp.loc === "home" && cp.k === "mine",
               (cp) => cp.loc === "home" && cp.k === "col",
               (cp) => cp.loc === "home" && cp.k === "bor",
-            ], r.f);
+            ], r.f, r.l);
             got.forEach((cp) => { cp.loc = "deck"; cp.deck = d.id; });
             const rest = r.q - got.length;
             if (rest > 0) {
-              if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "deck", deck: d.id, f: r.f || undefined }); created += rest; }
+              if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "deck", deck: d.id, f: r.f, l: r.l }); created += rest; }
               else missing.push(`${rest} × ${name(r.pick)}`);
             }
           }
@@ -1388,7 +1429,7 @@
           }
           const date = L.date || today();
           if (L.dest === "borrow") {
-            rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, "bor", { from: p.id, fs: date, f: r.f || undefined }); });
+            rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, "bor", { from: p.id, fs: date, f: r.f, l: r.l }); });
             lines.push(`Anotado: ${p.name} te prestó ${nc(rows.reduce((s, r) => s + r.q, 0))} el ${fdate(date)}.`);
           } else {
             const fromDecks = [], missing = [];
@@ -1398,14 +1439,14 @@
                 (cp) => cp.loc === "home" && cp.k === "mine",
                 (cp) => cp.loc === "home" && cp.k === "col",
                 (cp) => cp.loc === "deck" && cp.k !== "bor",
-              ], r.f);
+              ], r.f, r.l);
               got.forEach((cp) => {
                 if (cp.loc === "deck") fromDecks.push(`${name(cp.c)} (salió del mazo ${dname(cp.deck)})`);
                 cp.loc = "loan"; cp.to = p.id; cp.ls = date; delete cp.deck;
               });
               const rest = r.q - got.length;
               if (rest > 0) {
-                if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "loan", to: p.id, ls: date, f: r.f || undefined }); created += rest; }
+                if (L.createMissing) { for (let i = 0; i < rest; i++) newCopy(r.pick, "mine", { loc: "loan", to: p.id, ls: date, f: r.f, l: r.l }); created += rest; }
                 else missing.push(`${rest} × ${name(r.pick)}`);
               }
             }
@@ -1421,16 +1462,21 @@
         const date = L.date || today();
         if (L.bdest === "sale") {
           await changeStock((items) => {
-            rows.forEach((r) => { const it = items[r.pick] || { q: 0, p: null }; it.q = (it.q || 0) + r.q; items[r.pick] = it; });
+            rows.forEach((r) => {
+              const it = items[r.pick] || { q: 0, p: null };
+              if (lg(r) === "cn") it.qc = (it.qc || 0) + r.q;
+              else it.q = (it.q || 0) + r.q;
+              items[r.pick] = it;
+            });
           });
           rows.forEach((r) => (saleLoc[r.pick] = L.sloc));
           await saveSaleLoc();
           lines.push(`Se sumaron ${nc(rows.reduce((s, r) => s + r.q, 0))} al stock de la tienda · ${SALE[L.sloc].i} ${SALE[L.sloc].l}.`);
         } else {
-          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.bdest, r.f ? { f: true } : null); });
+          rows.forEach((r) => { for (let i = 0; i < r.q; i++) newCopy(r.pick, L.bdest, { f: r.f, l: r.l }); });
           lines.push(`Se sumaron ${nc(rows.reduce((s, r) => s + r.q, 0))} a ${L.bdest === "mine" ? "Mis cartas (🏠 en casa)" : "Mi colección"}.`);
         }
-        rows.forEach((r) => D.tx.push({ id: uid(), type: "buy", c: r.pick, q: r.q, p: r.p ?? null, d: date, who: L.who.trim(), dest: L.bdest, sloc: L.bdest === "sale" ? L.sloc : undefined, at: Date.now() }));
+        rows.forEach((r) => D.tx.push({ id: uid(), type: "buy", c: r.pick, q: r.q, p: r.p ?? null, d: date, who: L.who.trim(), dest: L.bdest, sloc: L.bdest === "sale" ? L.sloc : undefined, l: lg(r) === "cn" ? "cn" : undefined, at: Date.now() }));
         const tot = rows.reduce((s, r) => s + (r.p || 0) * r.q, 0);
         lines.push(`Compra registrada: ${money(tot)}.`);
         save();
@@ -1440,9 +1486,10 @@
         await changeStock((items) => {
           rows.forEach((r) => {
             const it = items[r.pick];
-            const have = it ? it.q || 0 : 0;
+            const k = lg(r) === "cn" ? "qc" : "q";
+            const have = it ? it[k] || 0 : 0;
             const fromStore = Math.min(have, r.q - (plan.get(r) || 0));
-            if (fromStore > 0) it.q = have - fromStore;
+            if (fromStore > 0) it[k] = have - fromStore;
             plan.set(r, fromStore);
           });
         });
@@ -1454,7 +1501,7 @@
             (cp) => cp.k === "mine" && cp.loc === "deck",
             (cp) => cp.k === "col" && cp.loc === "home",
             (cp) => cp.k === "col" && cp.loc === "deck",
-          ]) : [];
+          ], false, r.l) : [];
           const parts = [];
           if (fromStore) parts.push(`${fromStore} del stock de la tienda${SALE[saleLoc[r.pick]] ? " (" + SALE[saleLoc[r.pick]].i + " " + SALE[saleLoc[r.pick]].l + ")" : ""}`);
           const inDeck = got.filter((cp) => cp.loc === "deck");
@@ -1467,8 +1514,8 @@
           if (nf > 0) parts.push(`${nf} no estaba cargada en ningún lado`);
           D.copies = D.copies.filter((cp) => !got.includes(cp));
           const src = parts.join(" · ");
-          lines.push(`• ${r.q} × ${name(r.pick)}: ${src}`);
-          D.tx.push({ id: uid(), type: "sell", c: r.pick, q: r.q, p: r.p ?? null, d: date, who: L.who.trim(), src, at: Date.now() });
+          lines.push(`• ${r.q} × ${name(r.pick)}${lg(r) === "cn" ? " (chino)" : ""}: ${src}`);
+          D.tx.push({ id: uid(), type: "sell", c: r.pick, q: r.q, p: r.p ?? null, d: date, who: L.who.trim(), src, l: lg(r) === "cn" ? "cn" : undefined, at: Date.now() });
         }
         const tot = rows.reduce((s, r) => s + (r.p || 0) * r.q, 0);
         lines.unshift(`Venta registrada: ${money(tot)}. De dónde salió cada carta:`);

@@ -175,17 +175,24 @@ window.RB = (() => {
     return i === -1 ? 99 : i;
   }
 
-  function effectivePrice(card, inv) {
+  // Idiomas de las cartas físicas: inglés (q, p) y chino (qc, pc).
+  const LANGS = { en: "Inglés", cn: "Chino" };
+  function effectivePrice(card, inv, lang) {
     const it = inv.items[card.id];
+    if (lang === "cn" && it && it.pc !== null && it.pc !== undefined) return it.pc;
     if (it && it.p !== null && it.p !== undefined) return it.p;
     const rp = inv.settings.rarityPrices || {};
     const v = rp[card.r];
     return v === undefined || v === null ? null : v;
   }
 
-  function stock(card, inv) {
+  // Sin idioma: el total. Con "en" o "cn": solo ese idioma.
+  function stock(card, inv, lang) {
     const it = inv.items[card.id];
-    return it ? it.q || 0 : 0;
+    if (!it) return 0;
+    if (lang === "en") return it.q || 0;
+    if (lang === "cn") return it.qc || 0;
+    return (it.q || 0) + (it.qc || 0);
   }
 
   function money(n, inv) {
@@ -244,7 +251,7 @@ window.RB = (() => {
   };
 
   return {
-    DOMAIN_COLORS, DOMAIN_ES, RARITY_ES, TYPE_ES, loadCards, loadInventory, getJSON,
+    DOMAIN_COLORS, DOMAIN_ES, RARITY_ES, TYPE_ES, LANGS, loadCards, loadInventory, getJSON,
     rarityRank, effectivePrice, stock, money, variantLabel, esc, cleanText, dom, uniqueSorted, store,
   };
 })();
