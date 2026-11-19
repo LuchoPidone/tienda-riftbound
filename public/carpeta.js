@@ -712,6 +712,7 @@
       g.list.push(cp);
       grp.set(key, g);
     }
+    const vers = versionsOf(id);
     const deckOpts = D.decks.map((d) => `<option value="deck:${esc(d.id)}">🃏 ${esc(d.name)}</option>`).join("");
     const perOpts = D.people.map((p) => `<option value="loan:${esc(p.id)}">🤝 Prestar a ${esc(p.name)}</option>`).join("");
     const rows = [...grp.values()].map((g) => {
@@ -738,6 +739,12 @@
         acts += `<button class="btn ghost" data-kind="${esc(cp.id)}">${cp.k === "mine" ? "Pasar a Colección" : "Pasar a Mis cartas"}</button>
           <button class="btn ghost" data-rm="${esc(cp.id)}" aria-label="Quitar una">🗑</button>`;
       }
+      if (vers.length > 1) {
+        acts += `<select class="field" data-ver="${esc(g.list.map((x) => x.id).join(","))}" aria-label="Cambiar versión">
+          <option value="">🔁 Cambiar versión…</option>
+          ${vers.filter((v) => v.id !== id).map((v) => `<option value="${esc(v.id)}">${esc(versionLabel(v))}</option>`).join("")}
+        </select>`;
+      }
       return `<div class="cp"><span class="what">${n > 1 ? `<b>×${n}</b> ` : ""}${what}</span>${acts}</div>`;
     }).join("");
     const st = stockOf(id);
@@ -746,7 +753,7 @@
       <div><img src="${esc(c.img)}" alt="${esc(c.n)}"></div>
       <div>
         <h2>${esc(c.n)}</h2>
-        <div class="note">${esc(cardMeta(c))}</div>
+        <div class="note">Versión: ${esc(versionLabel(c))}</div>
         <h3 class="sub">Dónde están tus copias (${mine.length})</h3>
         <div class="cps">${rows || `<p class="note">No tenés copias cargadas de esta carta.</p>`}</div>
         <div class="mini">
@@ -791,6 +798,22 @@
     }
   });
   $("modalBody").addEventListener("change", (e) => {
+    const vs = e.target.closest("[data-ver]");
+    if (vs && vs.value) {
+      const ids = vs.dataset.ver.split(",");
+      let n = ids.length;
+      if (n > 1) {
+        const a = window.prompt(`¿Cuántas de estas ${n} copias son de la versión ${versionLabel(byId.get(vs.value))}?`, String(n));
+        if (a === null) { vs.value = ""; return; }
+        n = Math.max(0, Math.min(ids.length, parseInt(a, 10) || 0));
+      }
+      ids.slice(0, n).forEach((cid) => { const cp = D.copies.find((x) => x.id === cid); if (cp) cp.c = vs.value; });
+      if (!D.copies.some((x) => x.c === openId)) openId = vs.value;
+      save();
+      toast(n === 1 ? "Versión cambiada" : `${n} copias cambiadas de versión`);
+      refresh();
+      return;
+    }
     const sel = e.target.closest("[data-mvsel]");
     if (!sel || !sel.value) return;
     const cp = D.copies.find((x) => x.id === sel.dataset.mvsel);
@@ -825,7 +848,22 @@
       .toLowerCase().replace(/[’'`´]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   }
   let nameIdx = new Map();
+  let baseIdx = new Map();
   let codeIdx = new Map();
+  // Nombre sin la marca de versión del final: "(Alternate Art)", "(Overnumbered)", "(Metal)", etc.
+  const baseName = (n) => String(n || "").replace(/\s*\((alternate art|overnumbered|signature|metal|starter|launch exclusive|ultimate|gg ez|showcase)\)\s*$/i, "");
+  // Todas las versiones de una carta (mismo nombre base), la normal primero.
+  function versionsOf(id) {
+    const c = byId.get(id);
+    return c ? baseIdx.get(norm(baseName(c.n))) || [c] : [];
+  }
+  function versionLabel(c) {
+    const v = RB.variantLabel(c);
+    if (/\(metal\)/i.test(c.n)) v.push("Metal");
+    if (/\(starter\)/i.test(c.n)) v.push("Starter");
+    const kind = v.length ? v.join(", ") : c.r === "Showcase" || c.r === "Promo" ? "" : "Normal";
+    return `${c.sl || c.s}${c.num !== null ? " #" + c.num : ""} · ${RB.RARITY_ES[c.r] || c.r}${kind ? " · " + kind : ""}${c.code ? " · " + c.code.toUpperCase() : ""}`;
+  }
   let codeRe = null;
   const codeKey = (s, pre, n, suf) => `${s.toLowerCase()}-${(pre || "").toLowerCase()}${Number(n)}${(suf || "").toLowerCase()}`;
   function pref(c) {
@@ -834,11 +872,15 @@
   }
   function buildIndex() {
     nameIdx = new Map();
+    baseIdx = new Map();
     codeIdx = new Map();
     for (const c of cards) {
       const k = norm(c.n);
       if (!nameIdx.has(k)) nameIdx.set(k, []);
       nameIdx.get(k).push(c);
+      const b = norm(baseName(c.n));
+      if (!baseIdx.has(b)) baseIdx.set(b, []);
+      baseIdx.get(b).push(c);
       const m = /^[a-z]+-([a-z]*?)(\d+)([a-z]?)(?:[-\/]|$)/i.exec(c.code || "");
       if (m) {
         const key = codeKey(c.s, m[1], m[2], m[3]);
@@ -847,6 +889,7 @@
       }
     }
     for (const arr of nameIdx.values()) arr.sort((a, b) => pref(a) - pref(b));
+    for (const arr of baseIdx.values()) arr.sort((a, b) => pref(a) - pref(b));
     const sets = [...new Set(cards.map((c) => c.s))].filter(Boolean).sort((a, b) => b.length - a.length);
     codeRe = new RegExp(`[(\\[]?\\b(${sets.join("|")})\\s*[-–·•#:]?\\s*([a-z]{0,2}?)\\s*0*(\\d{1,3})([a-z]?)\\b(?:\\s*\\/\\s*\\d{1,3})?[)\\]]?`, "i");
   }
@@ -876,6 +919,11 @@
     if ((m = /^(\d{1,3})\s*[x×]?\s+(.+)$/i.exec(l))) { q = Number(m[1]); l = m[2]; hadQ = true; }
     else if ((m = /^(.+?)\s*[(\[]?\s*[x×]\s*(\d{1,3})\s*[)\]]?$/i.exec(l))) { q = Number(m[2]); l = m[1]; hadQ = true; }
     else if ((m = /^[x×](\d{1,3})\s+(.+)$/i.exec(l))) { q = Number(m[1]); l = m[2]; hadQ = true; }
+    // Pistas de versión escritas en la línea: "alter", "alt", "AA", "overnumbered", "firma", "metal"...
+    const hint = /\b(alter|alt|alternate|alternativ[oa]|aa)\b/i.test(l) ? "alt"
+      : /\b(overnumbered|sobrenumerada|showcase)\b/i.test(l) ? "ov"
+      : /\b(signature|firma|firmada)\b/i.test(l) ? "sig"
+      : /\bmetal\b/i.test(l) ? "metal" : "";
     let cands = [], sure = false;
     const cm = codeRe && codeRe.exec(l);
     if (cm) {
@@ -883,13 +931,25 @@
       if (hits.length) { cands = hits.slice(); sure = true; }
       l = (l.slice(0, cm.index) + " " + l.slice(cm.index + cm[0].length)).trim();
     }
-    const name = norm(l.replace(/\((?:[^)]*)\)\s*$/, "").replace(/\[[^\]]*\]/g, ""));
+    const full = norm(l.replace(/\[[^\]]*\]/g, ""));
+    const name = norm(baseName(l.replace(/\[[^\]]*\]/g, "").trim()).replace(/\((?:alter|alt|aa|alternativ[oa]|firma|firmada|sobrenumerada|showcase)\)\s*$/i, "").replace(/\s+\b(alter|alt|aa)\b\s*$/i, ""));
     if (!cands.length && name) {
-      const ex = nameIdx.get(name) || nameIdx.get(norm(l));
-      if (ex) { cands = ex.slice(); sure = true; }
-    } else if (cands.length && name) {
-      const same = nameIdx.get(name);
-      if (same && !cands.some((c) => norm(c.n) === name)) cands = cands.concat(same);
+      const ex = nameIdx.get(full);
+      const all = baseIdx.get(name) || nameIdx.get(name) || baseIdx.get(norm(l.replace(/\((?:[^)]*)\)\s*$/, "")));
+      if (ex || all) {
+        cands = (ex || []).concat((all || []).filter((c) => !(ex || []).includes(c)));
+        sure = true;
+      }
+    }
+    // Siempre ofrecer todas las versiones de la carta para poder elegir.
+    if (cands.length) {
+      const more = versionsOf(cands[0].id).filter((c) => !cands.includes(c));
+      cands = cands.concat(more);
+    }
+    if (cands.length && hint) {
+      const want = (c) => (hint === "alt" ? c.alt : hint === "ov" ? c.ov : hint === "sig" ? c.sig : /\(metal\)/i.test(c.n));
+      const i = cands.findIndex(want);
+      if (i > 0) cands.unshift(cands.splice(i, 1)[0]);
     }
     if (!cands.length && name.length >= 3) {
       const words = name.split(" ");
@@ -1004,7 +1064,7 @@
     }
     const rowsHtml = L.rows.map((r, i) => {
       const c = byId.get(r.pick);
-      const opts = r.cands.map((id) => { const x = byId.get(id); return `<option value="${esc(id)}" ${id === r.pick ? "selected" : ""}>${esc(x.n)} · ${esc(cardMeta(x))}</option>`; }).join("");
+      const opts = r.cands.map((id) => { const x = byId.get(id); return `<option value="${esc(id)}" ${id === r.pick ? "selected" : ""}>${esc(baseName(x.n))} · ${esc(versionLabel(x))}</option>`; }).join("");
       return `<div class="pr ${!c ? "bad" : r.sure ? "" : "unsure"}" data-row="${i}">
         <input class="field pq" type="number" min="1" value="${r.q}" aria-label="Cantidad" data-rq>
         ${c ? `<img src="${esc(c.img)}" alt="">` : `<span></span>`}
