@@ -1,4 +1,4 @@
-// Mi carpeta: dónde está cada carta, mis cartas, colección, mazos, préstamos y compras/ventas.
+// Mi carpeta: dónde está cada carta, mis cartas, colección, mazos, préstamos y compras/ventas. (v4)
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => RB.esc(s);
