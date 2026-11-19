@@ -168,6 +168,10 @@
     }
     buildIndex();
     buildFilters();
+    // Las que solo existen en foil no llevan la marca aparte.
+    let fixed = 0;
+    for (const cp of D.copies) if (cp.f && foilOnly(byId.get(cp.c))) { delete cp.f; fixed++; }
+    if (fixed) save();
     const h = location.hash.slice(1);
     if (["todo", "mine", "col", "decks", "loans", "tx"].includes(h)) tab = h;
     render();
@@ -523,7 +527,7 @@
   function deckRowHtml(r) {
     const n = r.copies.length;
     const opts = versionsOf(r.id)
-      .flatMap((v) => [[v, false], [v, true]])
+      .flatMap((v) => (foilOnly(v) ? [[v, false]] : [[v, false], [v, true]]))
       .filter(([v, fo]) => !(v.id === r.id && fo === r.f))
       .map(([v, fo]) => `<option value="${esc(v.id)}|${fo ? 1 : 0}">${esc(versionLabel(v))}${fo ? " · ✨ Foil" : ""}</option>`)
       .join("");
@@ -542,6 +546,7 @@
     </div>`;
   }
   function deckAdd(d, id, foil) {
+    if (foilOnly(byId.get(id))) foil = false;
     const got = take(id, 1, [
       (cp) => cp.loc === "home" && cp.k === "mine" && !!cp.f === !!foil,
       (cp) => cp.loc === "home" && cp.k === "col" && !!cp.f === !!foil,
@@ -594,7 +599,7 @@
     if (!sel || !sel.value) return;
     const { d, list } = deckRowCopies(sel.closest(".dk-row"));
     const [tid, tf] = sel.value.split("|");
-    const foil = tf === "1";
+    const foil = tf === "1" && !foilOnly(byId.get(tid));
     const cur = list[0];
     if (!cur) return;
     // Si esa versión está en casa, se cambian de lugar; si no, se corrige la versión de esta copia.
@@ -837,6 +842,7 @@
   }
   function newCopy(c, k, extra) {
     const cp = Object.assign({ id: uid(), c, k, loc: "home", added: Date.now() }, extra || {});
+    if (!cp.f || foilOnly(byId.get(c))) delete cp.f;
     D.copies.push(cp);
     return cp;
   }
@@ -882,7 +888,7 @@
         acts += `<button class="btn ghost" data-kind="${esc(cp.id)}">${cp.k === "mine" ? "Pasar a Colección" : "Pasar a Mis cartas"}</button>
           <button class="btn ghost" data-rm="${esc(cp.id)}" aria-label="Quitar una">🗑</button>`;
       }
-      acts += `<button class="btn ghost" data-foil="${esc(cp.id)}">${cp.f ? "Quitar foil a 1" : "✨ Marcar 1 como foil"}</button>`;
+      if (!foilOnly(c)) acts += `<button class="btn ghost" data-foil="${esc(cp.id)}">${cp.f ? "Quitar foil a 1" : "✨ Marcar 1 como foil"}</button>`;
       if (vers.length > 1) {
         acts += `<select class="field" data-ver="${esc(g.list.map((x) => x.id).join(","))}" aria-label="Cambiar versión">
           <option value="">🔁 Cambiar versión…</option>
@@ -1003,6 +1009,10 @@
   function versionsOf(id) {
     const c = byId.get(id);
     return c ? baseIdx.get(norm(baseName(c.n))) || [c] : [];
+  }
+  // Épicas, raras, promos y versiones especiales (alternativo, firma, sobrenumerada, showcase) solo salen en foil.
+  function foilOnly(c) {
+    return !!c && (["Epic", "Rare", "Promo", "Showcase"].includes(c.r) || c.alt || c.sig || c.ov);
   }
   function versionLabel(c) {
     const v = RB.variantLabel(c);
@@ -1222,7 +1232,7 @@
           ${r.orig ? `<div class="orig">${!c ? "❌ " : !r.sure ? '<span class="warn">¿Es esta? </span>' : ""}«${esc(r.orig)}»</div>` : ""}
         </div>
         ${tx ? `<input class="field pp" type="number" min="0" step="any" placeholder="Precio c/u" value="${r.p ?? ""}" data-rpp aria-label="Precio por unidad">` : ""}
-        ${L.mode !== "sell" && c ? `<label class="foilck" title="Foil"><input type="checkbox" data-rf ${r.f ? "checked" : ""}> ✨ Foil</label>` : ""}
+        ${L.mode !== "sell" && c && !foilOnly(c) ? `<label class="foilck" title="Foil"><input type="checkbox" data-rf ${r.f ? "checked" : ""}> ✨ Foil</label>` : ""}
         <button class="x" data-rx aria-label="Quitar">×</button>
       </div>`;
     }).join("");
@@ -1323,6 +1333,7 @@
   // Saca copias por orden de preferencia.
   // f === true: solo foil · f falso: primero las no foil y después cualquiera.
   function take(cardId, n, prefs, f) {
+    if (foilOnly(byId.get(cardId))) f = false;
     const out = [];
     const all = f ? prefs.map((pr) => (cp) => !!cp.f && pr(cp)) : prefs.map((pr) => (cp) => !cp.f && pr(cp)).concat(prefs);
     for (const pr of all) {
