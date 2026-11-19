@@ -57,3 +57,19 @@ Cuando vendas, descontá las cantidades desde el administrador.
 - **La tienda dice que no pudo cargar las cartas:** esperá unos minutos y recargá. La primera carga baja más de 1400 cartas y puede tardar.
 - **El admin dice "Falta configurar ADMIN_PASSWORD":** revisá el Paso 3 y volvé a publicar.
 - **Salió una expansión nueva:** entrá al admin → Configuración → **Actualizar lista de cartas ahora**.
+
+## Mi carpeta (tu colección privada)
+
+Entrá a `tudireccion.netlify.app/carpeta` con la misma contraseña del administrador. Solo vos podés verla.
+
+- **📍 Dónde está:** cada carta tuya con su ubicación: 🏠 en casa, 🃏 en un mazo, 🤝 prestada o 🏷️ en venta en la tienda.
+- **Mis cartas** y **Mi colección:** tus cartas que no vendés y tus piezas de colección.
+- **Mazos:** pegá la lista de un mazo y las cartas pasan de "en casa" a ese mazo. Si lo desarmás, vuelven a casa.
+- **Préstamos:** una carpeta por persona (queda guardada aunque esté vacía). En rojo, los que te deben cartas. Si pasa más de un mes, aparece un aviso arriba de todo.
+- **Compras y ventas:** el resumen del año, con lo gastado, lo cobrado y el balance mes por mes.
+  - Al **comprar** elegís adónde va: para vos, para vender (y si va a la carpeta de ventas, la caja de bulk o la cajonera) o a la colección.
+  - Al **vender** se descuenta primero del stock de la tienda y, si ahí no está, de Mis cartas.
+
+En el administrador, cada carta en venta tiene el campo **Dónde está** (📁 Carpeta de ventas, 📦 Caja de bulk o 🗄️ Cajonera). Ese dato lo ves solo vos: los clientes no lo ven.
+
+**Fotos:** usá el lector de fotos en Claude (https://claude.ai/artifact/LKNSmgC9wk9rEUs4qVHGzn). Te devuelve la lista para pegar en "Cargar cartas", "Registrar compra" o "Registrar venta".
