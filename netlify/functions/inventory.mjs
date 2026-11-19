@@ -38,8 +38,14 @@ function clean(body) {
       if (!it || typeof it !== "object") continue;
       const q = Math.max(0, Math.min(9999, Math.floor(Number(it.q) || 0)));
       const p = price(it.p);
-      if (q === 0 && p === null) continue;
-      items[str(id, 80)] = { q, p };
+      // qc / pc: stock y precio de las cartas en chino.
+      const qc = Math.max(0, Math.min(9999, Math.floor(Number(it.qc) || 0)));
+      const pc = price(it.pc);
+      if (q === 0 && p === null && qc === 0 && pc === null) continue;
+      const out = { q, p };
+      if (qc) out.qc = qc;
+      if (pc !== null) out.pc = pc;
+      items[str(id, 80)] = out;
     }
   }
   return {
